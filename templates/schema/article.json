@@ -1,0 +1,26 @@
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "REPLACE_HEADLINE",
+  "description": "REPLACE_DESCRIPTION",
+  "author": {
+    "@type": "Person",
+    "name": "REPLACE_AUTHOR_NAME",
+    "url": "REPLACE_AUTHOR_URL"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "REPLACE_PUBLISHER",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "REPLACE_LOGO_URL"
+    }
+  },
+  "datePublished": "REPLACE_DATE",
+  "dateModified": "REPLACE_DATE_MODIFIED",
+  "image": "REPLACE_IMAGE_URL",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "REPLACE_PAGE_URL"
+  }
+}

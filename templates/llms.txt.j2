@@ -1,0 +1,17 @@
+# {{ site_name }}
+
+> {{ site_description }}
+
+## About
+
+{{ about_text }}
+
+## Key Pages
+
+{% for page in pages -%}
+- [{{ page.title }}]({{ page.url }}): {{ page.description }}
+{% endfor %}
+
+## Contact
+
+{{ contact_info }}

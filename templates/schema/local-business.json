@@ -1,0 +1,28 @@
+{
+  "@context": "https://schema.org",
+  "@type": "LocalBusiness",
+  "name": "REPLACE_NAME",
+  "url": "REPLACE_URL",
+  "telephone": "REPLACE_PHONE",
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "REPLACE_STREET",
+    "addressLocality": "REPLACE_CITY",
+    "addressRegion": "REPLACE_STATE",
+    "postalCode": "REPLACE_ZIP",
+    "addressCountry": "REPLACE_COUNTRY"
+  },
+  "geo": {
+    "@type": "GeoCoordinates",
+    "latitude": "REPLACE_LAT",
+    "longitude": "REPLACE_LNG"
+  },
+  "openingHoursSpecification": [
+    {
+      "@type": "OpeningHoursSpecification",
+      "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      "opens": "09:00",
+      "closes": "17:00"
+    }
+  ]
+}
