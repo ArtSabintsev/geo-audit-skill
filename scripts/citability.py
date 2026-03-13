@@ -50,6 +50,37 @@ def score_passage(text, heading=None):
     if any(re.search(p, text, re.I) for p in definition_patterns):
         abq += 15
 
+    # Comparison patterns (vs, compared to, difference between)
+    comparison_patterns = [
+        r"\bvs\.?\s+",
+        r"\bcompared\s+to\b",
+        r"\bdifference\s+between\b",
+        r"\b(?:better|worse)\s+than\b",
+        r"\b(?:advantages?|disadvantages?|pros?|cons?)\b",
+    ]
+    if any(re.search(p, text, re.I) for p in comparison_patterns):
+        abq += 5
+
+    # How-to / instructional patterns
+    howto_patterns = [
+        r"\bhow\s+to\b",
+        r"\bstep\s+\d+\b",
+        r"\bfollow\s+these\s+steps\b",
+        r"\bhere(?:'s| is)\s+(?:how|what)\b",
+        r"\b(?:first|next|then|finally),?\s+\w+",
+    ]
+    if any(re.search(p, text, re.I) for p in howto_patterns):
+        abq += 5
+
+    # Cause-effect patterns
+    cause_effect_patterns = [
+        r"\b(?:because|therefore|consequently|as a result)\b",
+        r"\b(?:leads? to|results? in|causes?|due to)\b",
+        r"\b(?:if|when)\s+.+?,?\s+(?:then|it)\b",
+    ]
+    if any(re.search(p, text, re.I) for p in cause_effect_patterns):
+        abq += 3
+
     first_60 = " ".join(words[:60])
     if re.search(r"(?:\d+%|\$[\d,]+|\d+\s+(?:million|billion))", first_60):
         abq += 10
@@ -96,7 +127,29 @@ def score_passage(text, heading=None):
     elif proper_nouns >= 1:
         sc += 4
 
-    scores["self_containment"] = min(sc, 25)
+    # Penalty: dangling pronouns at start of passage
+    first_sentence = sentences[0] if sentences else ""
+    first_words = first_sentence.split()[:3]
+    dangling_starts = {"it", "this", "that", "these", "those", "they", "he", "she"}
+    if first_words and first_words[0].lower() in dangling_starts:
+        sc -= 3
+
+    # Penalty: context-reference phrases that require surrounding text
+    context_refs = [
+        r"\bas\s+(?:mentioned|noted|described|discussed)\s+(?:above|below|earlier|previously)\b",
+        r"\b(?:the\s+)?(?:above|below|following|preceding)\s+(?:section|paragraph|table|chart)\b",
+        r"\bsee\s+(?:above|below)\b",
+        r"\bas\s+we\s+(?:saw|discussed|mentioned)\b",
+    ]
+    if any(re.search(p, text, re.I) for p in context_refs):
+        sc -= 4
+
+    # Bonus: starts with a complete declarative sentence
+    if first_words and len(first_words) >= 3:
+        if not first_words[0].lower() in dangling_starts:
+            sc += 2
+
+    scores["self_containment"] = min(max(sc, 0), 25)
 
     # --- Structural Readability (0-20) ---
     sr = 0
@@ -225,6 +278,40 @@ def analyze_page(url):
     for b in scored:
         grade_dist[b["grade"]] += 1
 
+    # --- Page-level structural findings ---
+    page_findings = []
+
+    # Data table detection: flag pages with 500+ words but no data tables
+    total_word_count = sum(b["word_count"] for b in scored)
+    has_tables = bool(soup.find("table"))
+    if total_word_count > 500 and not has_tables:
+        page_findings.append({
+            "id": "citability-no-data-table",
+            "severity": "low",
+            "title": "No data tables on a content-heavy page",
+            "description": (
+                f"This page has {total_word_count} words but no <table> elements. "
+                "Data tables improve citability by providing structured, extractable facts "
+                "that AI models can reference directly."
+            ),
+        })
+
+    # Heading structure validation: flag when >50% of blocks lack headings
+    blocks_without_headings = sum(
+        1 for b in blocks if b["heading"] == "Introduction"
+    )
+    if len(blocks) > 2 and blocks_without_headings / len(blocks) > 0.5:
+        page_findings.append({
+            "id": "citability-poor-heading-structure",
+            "severity": "medium",
+            "title": "Over 50% of content blocks lack headings",
+            "description": (
+                f"{blocks_without_headings} of {len(blocks)} content blocks have no "
+                "associated heading. Well-structured headings help AI models identify "
+                "and extract specific answer passages."
+            ),
+        })
+
     return {
         "url": url,
         "blocks_analyzed": len(scored),
@@ -234,6 +321,7 @@ def analyze_page(url):
         "top_5": top5,
         "bottom_5": bottom5,
         "all_blocks": scored,
+        "page_findings": page_findings,
     }
 
 

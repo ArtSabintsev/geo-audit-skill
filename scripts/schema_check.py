@@ -119,8 +119,26 @@ def validate_schema(data):
         issues.append({"severity": "high", "message": "Missing @type property"})
         return issues
 
-    if not data.get("@context"):
+    context = data.get("@context")
+    if not context:
         issues.append({"severity": "medium", "message": "Missing @context (should be https://schema.org)"})
+    else:
+        # Normalize to string for comparison
+        ctx_str = context if isinstance(context, str) else str(context)
+        valid_contexts = {
+            "https://schema.org",
+            "https://schema.org/",
+            "http://schema.org",
+            "http://schema.org/",
+        }
+        if ctx_str not in valid_contexts:
+            issues.append({
+                "severity": "medium",
+                "message": (
+                    f"Non-standard @context value: '{ctx_str}'. "
+                    "Use 'https://schema.org' for maximum compatibility with AI models."
+                ),
+            })
 
     for schema_type in types:
         required = REQUIRED_PROPS.get(schema_type, [])

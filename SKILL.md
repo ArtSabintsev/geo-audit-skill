@@ -34,7 +34,7 @@ allowed-tools: Read, Grep, Glob, Bash, WebFetch, Write, Edit, Agent
    ```bash
    python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full
    ```
-   This returns JSON with page data, robots.txt, llms.txt status, and sitemap pages.
+   This returns JSON with page data (including language, viewport, OG tags, meta robots, X-Robots-Tag, response time), robots.txt, llms.txt status, and sitemap pages.
 
 2. **Detect business type** from the fetched data:
    - **SaaS** — pricing page, "sign up", "free trial", API docs, /app, /dashboard
@@ -51,9 +51,9 @@ allowed-tools: Read, Grep, Glob, Bash, WebFetch, Write, Edit, Agent
    - Product/service pages
    - Pricing page (if SaaS)
 
-### Phase 2: Parallel Analysis (5 Subagents)
+### Phase 2: Parallel Analysis (8 Subagents)
 
-Launch these 5 analyses simultaneously using the Agent tool:
+Launch these 8 analyses simultaneously using the Agent tool:
 
 #### Agent 1: AI Citability + Content Quality
 - Run citability scorer on up to 10 key pages:
@@ -61,15 +61,18 @@ Launch these 5 analyses simultaneously using the Agent tool:
   python3 ${CLAUDE_SKILL_DIR}/scripts/citability.py <url>
   ```
 - Score passages for AI citation readiness (answer block quality, self-containment, statistical density, structural readability, uniqueness signals)
-- Assess E-E-A-T signals: author credentials, original research, expertise indicators
-- Check content freshness: publication dates, last-modified headers, temporal references
-- Evaluate readability: sentence length distribution, jargon density
+- Detects comparison patterns, how-to/instructional content, cause-effect language
+- Enhanced self-containment: flags dangling pronouns, context-reference phrases
+- Page-level findings: data table detection (>500 word pages), heading structure validation (>50% blocks without headings)
 
-#### Agent 2: AI Crawler Access + llms.txt
+#### Agent 2: AI Crawler Access + llms.txt Quality
 - Parse robots.txt results from Phase 1 fetch data
-- Check status of these AI crawlers: GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, anthropic-ai, PerplexityBot, CCBot, Bytespider, cohere-ai, Google-Extended, GoogleOther, Applebot-Extended, FacebookBot, Amazonbot
-- Check llms.txt and llms-full.txt existence and quality
-- If llms.txt exists, validate its structure
+- Check status of these AI crawlers: GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, anthropic-ai, PerplexityBot, CCBot, Bytespider, cohere-ai, Google-Extended, GoogleOther, Applebot-Extended, FacebookBot, Amazonbot, Meta-ExternalAgent, Meta-ExternalFetcher, YouBot, AI2Bot, Diffbot, ImagesiftBot
+- Run llms.txt quality scorer:
+  ```bash
+  python3 ${CLAUDE_SKILL_DIR}/scripts/llms_txt.py <url>
+  ```
+- Scores existence, content length, markdown structure (# title, > description, ## sections), key pages section, about section, markdown link format, llms-full.txt bonus
 - If llms.txt is missing, draft one based on site structure
 
 #### Agent 3: Schema / Structured Data
@@ -78,28 +81,66 @@ Launch these 5 analyses simultaneously using the Agent tool:
   python3 ${CLAUDE_SKILL_DIR}/scripts/schema_check.py <url>
   ```
 - Detect existing JSON-LD, microdata, RDFa
-- Validate against schema.org specs
+- Validate against schema.org specs including @context validation (missing or non-standard @context)
 - Identify missing schema types based on business type
 - Generate correct JSON-LD for missing schemas using templates in `templates/schema/`
 
-#### Agent 4: Technical SEO
-- Check from Phase 1 fetch data:
-  - HTTP status codes and redirect chains
-  - HTTPS enforcement
-  - Security headers (HSTS, CSP, X-Frame-Options, etc.)
-  - Canonical tags
-  - Meta robots directives
-  - Heading hierarchy (H1-H6 structure)
-  - Image alt text coverage
-  - Internal/external link structure
-- Check SSR vs client-side rendering
-- Check mobile meta viewport
-- Use WebFetch to check Core Web Vitals via PageSpeed Insights:
+#### Agent 4: Technical SEO (13 checks)
+- Run the technical SEO analyzer:
+  ```bash
+  python3 ${CLAUDE_SKILL_DIR}/scripts/technical_seo.py <url>
+  ```
+  Or pipe Phase 1 data:
+  ```bash
+  python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full | python3 ${CLAUDE_SKILL_DIR}/scripts/technical_seo.py
+  ```
+- 13 weighted checks: HTTPS, redirect chain, canonical tag, H1 count, meta description length, word count (300+), security headers, SSR detection, viewport meta, language attribute, Open Graph tags, response time (<3s), image alt text coverage (80%+)
+- Optionally check Core Web Vitals via PageSpeed Insights:
   ```
   https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=<url>&strategy=mobile
   ```
 
-#### Agent 5: Brand Mentions + Platform Optimization
+#### Agent 5: E-E-A-T Analysis (9 signals)
+- Run the E-E-A-T analyzer:
+  ```bash
+  python3 ${CLAUDE_SKILL_DIR}/scripts/eeat.py <url>
+  ```
+  Or pipe Phase 1 data:
+  ```bash
+  python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full | python3 ${CLAUDE_SKILL_DIR}/scripts/eeat.py
+  ```
+- 9 weighted signals: author bylines, publication dates, citation language, credentials, contact information, about page link, trust indicators, first-party expertise, schema.org authorship
+- Each signal has a weight; score = (earned weight / total weight) * 100
+
+#### Agent 6: Brand Presence
+- Run the brand presence analyzer:
+  ```bash
+  python3 ${CLAUDE_SKILL_DIR}/scripts/brand_presence.py <url>
+  ```
+  Or pipe Phase 1 data:
+  ```bash
+  python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full | python3 ${CLAUDE_SKILL_DIR}/scripts/brand_presence.py
+  ```
+- Social media links (10 platforms: Twitter/X, LinkedIn, GitHub, YouTube, Wikipedia, Instagram, Facebook, TikTok, Reddit, Crunchbase)
+- Review site links (5 platforms: G2, Capterra, Trustpilot, Product Hunt, Yelp)
+- Brand pages (/about, /press, /media, /newsroom, /news)
+- Schema.org sameAs links in structured data
+
+#### Agent 7: Platform Readiness (composite)
+- Run after all other dimension scores are available:
+  ```bash
+  echo '{"schema":72,"eeat":65,"citability":80,"llms_txt":45,"technical_seo":90,"brand_presence":55}' \
+    | python3 ${CLAUDE_SKILL_DIR}/scripts/platform_readiness.py
+  ```
+- Computes per-platform readiness:
+  - **Google AI Overviews**: schema 50% + eeat 50%
+  - **ChatGPT**: citability 50% + llms_txt 50%
+  - **Claude**: citability 40% + llms_txt 30% + eeat 30%
+  - **Perplexity**: technical_seo 50% + citability 50%
+  - **Gemini**: schema 40% + brand_presence 30% + eeat 30%
+- Overall score = average of all 5 platform scores
+
+#### Agent 8: Brand Mentions (Web Search)
 - Search for the brand/site name across:
   - Reddit (site:reddit.com "<brand>")
   - YouTube (site:youtube.com "<brand>")
@@ -107,11 +148,6 @@ Launch these 5 analyses simultaneously using the Agent tool:
   - LinkedIn presence
   - GitHub presence (if relevant)
   - Industry directories
-- Assess platform-specific optimization:
-  - **Google AI Overviews**: structured data, E-E-A-T, featured snippet formatting
-  - **ChatGPT**: citability score, llms.txt, clear definitions
-  - **Perplexity**: source diversity, recency, factual density
-  - **Gemini**: Google entity recognition, Knowledge Panel eligibility
 
 ### Phase 3: Report
 
@@ -166,21 +202,72 @@ Wait for user to approve specific items before making any code edits.
 ```
 python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> [mode]
 ```
-Modes: `page`, `robots`, `llms`, `sitemap`, `blocks`, `full`
+Modes: `page`, `robots`, `llms`, `sitemap`, `full`
 
-Returns JSON to stdout.
+Returns JSON to stdout. Page mode includes: language attribute, viewport meta, Open Graph tags, meta robots, X-Robots-Tag header, response time (ms), and checks 20 AI crawlers.
 
 ### citability.py
 ```
 python3 ${CLAUDE_SKILL_DIR}/scripts/citability.py <url>
 ```
-Returns JSON with per-passage citability scores and page-level summary.
+Returns JSON with per-passage citability scores, page-level summary, and structural findings (data table detection, heading structure validation).
 
 ### schema_check.py
 ```
 python3 ${CLAUDE_SKILL_DIR}/scripts/schema_check.py <url>
 ```
-Returns JSON with detected schemas, validation results, and missing schema recommendations.
+Returns JSON with detected schemas, validation results (including @context validation), and missing schema recommendations.
+
+### eeat.py
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/eeat.py <url>
+```
+Or pipe from fetch_page.py:
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full | python3 ${CLAUDE_SKILL_DIR}/scripts/eeat.py
+```
+Returns JSON with 9 E-E-A-T signals, per-signal weights, overall score, grade, and findings.
+
+### brand_presence.py
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/brand_presence.py <url>
+```
+Or pipe from fetch_page.py:
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full | python3 ${CLAUDE_SKILL_DIR}/scripts/brand_presence.py
+```
+Returns JSON with social platform presence (10), review platforms (5), brand pages, sameAs detection, score, and findings.
+
+### technical_seo.py
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/technical_seo.py <url>
+```
+Or pipe from fetch_page.py:
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full | python3 ${CLAUDE_SKILL_DIR}/scripts/technical_seo.py
+```
+Returns JSON with 13 weighted technical checks, per-check pass/fail, overall score, grade, and findings.
+
+### llms_txt.py
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/llms_txt.py <url>
+```
+Or pipe from fetch_page.py:
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full | python3 ${CLAUDE_SKILL_DIR}/scripts/llms_txt.py
+```
+Returns JSON with llms.txt quality score, spec compliance checks, and findings.
+
+### platform_readiness.py
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/platform_readiness.py <schema> <eeat> <citability> <llms_txt> <tech_seo> <brand>
+```
+Or pipe dimension scores as JSON:
+```
+echo '{"schema":72,"eeat":65,"citability":80,"llms_txt":45,"technical_seo":90,"brand_presence":55}' \
+  | python3 ${CLAUDE_SKILL_DIR}/scripts/platform_readiness.py
+```
+Returns JSON with per-platform readiness scores (Google AI Overviews, ChatGPT, Claude, Perplexity, Gemini), recommendations, and overall score.
 
 ---
 

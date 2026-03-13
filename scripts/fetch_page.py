@@ -31,6 +31,8 @@ AI_CRAWLERS = [
     "PerplexityBot", "CCBot", "Bytespider", "cohere-ai",
     "Google-Extended", "GoogleOther", "Applebot-Extended",
     "FacebookBot", "Amazonbot",
+    "Meta-ExternalAgent", "Meta-ExternalFetcher",
+    "YouBot", "AI2Bot", "Diffbot", "ImagesiftBot",
 ]
 
 SECURITY_HEADERS = [
@@ -50,10 +52,17 @@ def fetch_page(url, timeout=30):
         "internal_links": [], "external_links": [], "images": [],
         "structured_data": [], "has_ssr_content": True,
         "security_headers": {}, "errors": [],
+        "language": None, "viewport": None,
+        "og_tags": {}, "meta_robots": None, "x_robots_tag": None,
+        "response_time_ms": None,
     }
 
     try:
+        import time as _time
+        _t0 = _time.monotonic()
         resp = requests.get(url, headers=HEADERS, timeout=timeout, allow_redirects=True)
+        _t1 = _time.monotonic()
+        result["response_time_ms"] = round((_t1 - _t0) * 1000)
         if resp.history:
             result["redirect_chain"] = [
                 {"url": r.url, "status": r.status_code} for r in resp.history
@@ -64,7 +73,15 @@ def fetch_page(url, timeout=30):
         for h in SECURITY_HEADERS:
             result["security_headers"][h] = resp.headers.get(h)
 
+        # X-Robots-Tag header
+        result["x_robots_tag"] = resp.headers.get("X-Robots-Tag")
+
         soup = BeautifulSoup(resp.text, "lxml")
+
+        # Language attribute from <html lang="...">
+        html_tag = soup.find("html")
+        if html_tag:
+            result["language"] = html_tag.get("lang")
 
         # Title
         tag = soup.find("title")
@@ -78,6 +95,17 @@ def fetch_page(url, timeout=30):
                 result["meta_tags"][name.lower()] = content
                 if name.lower() == "description":
                     result["description"] = content
+                if name.lower() == "viewport":
+                    result["viewport"] = content
+                if name.lower() == "robots":
+                    result["meta_robots"] = content
+
+        # Open Graph tags
+        for meta in soup.find_all("meta", attrs={"property": True}):
+            prop = meta.get("property", "")
+            content = meta.get("content", "")
+            if prop.startswith("og:") and content:
+                result["og_tags"][prop] = content
 
         # Canonical
         link = soup.find("link", rel="canonical")
