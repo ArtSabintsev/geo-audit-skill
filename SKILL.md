@@ -6,6 +6,8 @@ description: >
   Generates fix files automatically and recommends code-level changes for approval.
   Use when user says "geo", "seo", "audit", "AI search", "AI visibility",
   "citability", or provides a URL for analysis.
+user-invocable: true
+argument-hint: <url> or quick <url>
 allowed-tools: Read, Grep, Glob, Bash, WebFetch, Write, Edit, Agent
 ---
 
@@ -30,7 +32,7 @@ allowed-tools: Read, Grep, Glob, Bash, WebFetch, Write, Edit, Agent
 
 1. **Fetch the homepage** using the `fetch_page.py` script:
    ```bash
-   python3 <skill-dir>/scripts/fetch_page.py <url> full
+   python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full
    ```
    This returns JSON with page data, robots.txt, llms.txt status, and sitemap pages.
 
@@ -56,7 +58,7 @@ Launch these 5 analyses simultaneously using the Agent tool:
 #### Agent 1: AI Citability + Content Quality
 - Run citability scorer on up to 10 key pages:
   ```bash
-  python3 <skill-dir>/scripts/citability.py <url>
+  python3 ${CLAUDE_SKILL_DIR}/scripts/citability.py <url>
   ```
 - Score passages for AI citation readiness (answer block quality, self-containment, statistical density, structural readability, uniqueness signals)
 - Assess E-E-A-T signals: author credentials, original research, expertise indicators
@@ -73,7 +75,7 @@ Launch these 5 analyses simultaneously using the Agent tool:
 #### Agent 3: Schema / Structured Data
 - Run schema checker on homepage and key pages:
   ```bash
-  python3 <skill-dir>/scripts/schema_check.py <url>
+  python3 ${CLAUDE_SKILL_DIR}/scripts/schema_check.py <url>
   ```
 - Detect existing JSON-LD, microdata, RDFa
 - Validate against schema.org specs
@@ -162,7 +164,7 @@ Wait for user to approve specific items before making any code edits.
 
 ### fetch_page.py
 ```
-python3 scripts/fetch_page.py <url> [mode]
+python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> [mode]
 ```
 Modes: `page`, `robots`, `llms`, `sitemap`, `blocks`, `full`
 
@@ -170,13 +172,13 @@ Returns JSON to stdout.
 
 ### citability.py
 ```
-python3 scripts/citability.py <url>
+python3 ${CLAUDE_SKILL_DIR}/scripts/citability.py <url>
 ```
 Returns JSON with per-passage citability scores and page-level summary.
 
 ### schema_check.py
 ```
-python3 scripts/schema_check.py <url>
+python3 ${CLAUDE_SKILL_DIR}/scripts/schema_check.py <url>
 ```
 Returns JSON with detected schemas, validation results, and missing schema recommendations.
 

@@ -22,16 +22,8 @@ Analyzes how visible your site is to AI-powered search (ChatGPT, Claude, Perplex
 
 ## Install
 
-Copy the skill directory to your Claude Code skills folder:
-
 ```bash
-cp -r geo-audit-skill ~/.claude/skills/geo-audit
-```
-
-Or symlink it:
-
-```bash
-ln -s /path/to/geo-audit-skill ~/.claude/skills/geo-audit
+npx skills add ArtSabintsev/geo-audit-skill
 ```
 
 ### Dependencies
