@@ -57,6 +57,8 @@ def fetch_page(url, timeout=30):
         "response_time_ms": None,
     }
 
+    result["detected_platform"] = None
+
     try:
         import time as _time
         _t0 = _time.monotonic()
@@ -161,6 +163,9 @@ def fetch_page(url, timeout=30):
                     f"Possible client-side-only rendering: #{root.get('id', '?')} has minimal content"
                 )
 
+        # Platform detection
+        result["detected_platform"] = detect_platform(resp.text, resp.headers)
+
     except requests.exceptions.Timeout:
         result["errors"].append(f"Timeout after {timeout}s")
     except requests.exceptions.ConnectionError as e:
@@ -169,6 +174,49 @@ def fetch_page(url, timeout=30):
         result["errors"].append(f"Error: {e}")
 
     return result
+
+
+def detect_platform(html, headers):
+    """Detect what platform/CMS a website is built on."""
+    lower = html.lower()
+    server = (headers.get("server") or "").lower()
+    powered_by = (headers.get("x-powered-by") or "").lower()
+
+    # Extract generator meta tag
+    gen_match = re.search(r'<meta[^>]+name=["\']generator["\'][^>]+content=["\']([^"\']+)["\']', html, re.I)
+    generator = (gen_match.group(1) if gen_match else "").lower()
+
+    if "wp-content" in lower or "wp-includes" in lower or "wordpress" in generator:
+        if ".wordpress.com" in lower or "WordPress.com" in headers.get("x-powered-by", ""):
+            return {"name": "WordPress.com", "slug": "wordpress-com"}
+        return {"name": "WordPress", "slug": "wordpress"}
+    if "squarespace.com" in lower or "static.squarespace.com" in lower or "squarespace-cdn" in lower:
+        return {"name": "Squarespace", "slug": "squarespace"}
+    if "wix.com" in lower or "wixstatic.com" in lower or headers.get("x-wix-request-id"):
+        return {"name": "Wix", "slug": "wix"}
+    if "cdn.shopify.com" in lower or headers.get("x-shopify-stage"):
+        return {"name": "Shopify", "slug": "shopify"}
+    if "webflow.com" in lower or "assets.website-files.com" in lower or "webflow" in generator:
+        return {"name": "Webflow", "slug": "webflow"}
+    if "ghost.org" in lower or "ghost" in generator:
+        return {"name": "Ghost", "slug": "ghost"}
+    if "framer.com" in lower or "framerusercontent.com" in lower:
+        return {"name": "Framer", "slug": "framer"}
+    if "hubspot.com" in lower or "hs-scripts.com" in lower or "hscollectedforms" in lower:
+        return {"name": "HubSpot", "slug": "hubspot"}
+    if "carrd.co" in lower:
+        return {"name": "Carrd", "slug": "carrd"}
+    if "weebly.com" in lower or "editmysite.com" in lower:
+        return {"name": "Weebly", "slug": "weebly"}
+    if "drupal" in lower or "drupal" in generator:
+        return {"name": "Drupal", "slug": "drupal"}
+    if "__next" in lower or "next.js" in powered_by:
+        return {"name": "Next.js", "slug": "nextjs"}
+    if "vercel" in server or headers.get("x-vercel-id"):
+        return {"name": "Vercel", "slug": "vercel"}
+    if "netlify" in server or headers.get("x-nf-request-id"):
+        return {"name": "Netlify", "slug": "netlify"}
+    return None
 
 
 def fetch_robots(url, timeout=15):

@@ -34,7 +34,15 @@ allowed-tools: Read, Grep, Glob, Bash, WebFetch, Write, Edit, Agent
    ```bash
    python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full
    ```
-   This returns JSON with page data (including language, viewport, OG tags, meta robots, X-Robots-Tag, response time), robots.txt, llms.txt status, and sitemap pages.
+   This returns JSON with page data (including language, viewport, OG tags, meta robots, X-Robots-Tag, response time, detected platform), robots.txt, llms.txt status, and sitemap pages.
+
+   The script auto-detects 15 platforms: WordPress, WordPress.com, Squarespace, Wix, Shopify, Webflow, Ghost, Framer, HubSpot, Carrd, Weebly, Drupal, Next.js, Vercel, Netlify. The `detected_platform` field will be `{"name": "Squarespace", "slug": "squarespace"}` or `null`.
+
+   **When a platform is detected**, tailor all fix recommendations to that platform. For example:
+   - WordPress: "Install Yoast SEO plugin, go to Yoast SEO > Tools > File Editor"
+   - Squarespace: "Go to Settings > Website > SEO > robots.txt"
+   - Wix: "Go to Dashboard > Marketing & SEO > SEO Tools > robots.txt Editor"
+   - Shopify: "Go to Online Store > Themes > Edit Code > robots.txt.liquid"
 
 2. **Detect business type** from the fetched data:
    - **SaaS** — pricing page, "sign up", "free trial", API docs, /app, /dashboard
