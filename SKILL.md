@@ -73,6 +73,9 @@ Launch these 8 analyses simultaneously using the Agent tool:
 - Enhanced self-containment: flags dangling pronouns, context-reference phrases
 - Page-level findings: data table detection (>500 word pages), heading structure validation (>50% blocks without headings)
 - FAQ/featured snippet detection: Q&A headings, definition patterns ("What is..."), numbered step lists, direct answer quality
+- Conversational language scoring: second-person pronouns, questions, contractions, natural connectors
+- Entity recognition: named entity density, defined terms, bold/emphasis terms
+- Semantic topic coverage: heading diversity, subtopic breadth, repetitive heading detection
 
 #### Agent 2: AI Crawler Access + llms.txt Quality
 - Parse robots.txt results from Phase 1 fetch data

@@ -388,10 +388,164 @@ def analyze_page(url):
             ),
         })
 
+    # --- Conversational language detection ---
+    all_text = " ".join(b["content"] for b in blocks)
+    all_words = all_text.split()
+    all_word_count = len(all_words)
+
+    if all_word_count > 100:
+        # Second person ("you", "your") signals reader-directed writing
+        second_person = len(re.findall(r"\b(?:you|your|you're|you've|you'll)\b", all_text, re.I))
+        # First person plural ("we", "our") signals inclusive tone
+        first_person = len(re.findall(r"\b(?:we|our|we're|we've|we'll)\b", all_text, re.I))
+        # Questions in body text (not headings)
+        body_questions = len(re.findall(r"[^.!?\n][^.!?\n]{10,}\?", all_text))
+        # Contractions signal natural voice
+        contractions = len(re.findall(
+            r"\b(?:don't|doesn't|isn't|aren't|wasn't|weren't|can't|won't|wouldn't|shouldn't|couldn't|it's|that's|there's|here's|let's)\b",
+            all_text, re.I
+        ))
+        # Conversational connectors
+        connectors = len(re.findall(
+            r"\b(?:for example|in other words|think of it as|put simply|basically|essentially|in short|the point is|here's the thing|the bottom line)\b",
+            all_text, re.I
+        ))
+
+        conversational_signals = second_person + first_person + body_questions + contractions + connectors
+        conv_ratio = conversational_signals / all_word_count
+
+        if conv_ratio < 0.005 and all_word_count > 300:
+            page_findings.append({
+                "id": "citability-low-conversational-tone",
+                "severity": "medium",
+                "title": "Content lacks conversational language",
+                "description": (
+                    "The page uses a formal or impersonal tone with very few "
+                    "second-person pronouns (you/your), questions, or conversational "
+                    "connectors. AI models trained on natural dialogue tend to favor "
+                    "and better cite content written in a conversational, reader-directed style."
+                ),
+            })
+        elif conv_ratio >= 0.01:
+            page_findings.append({
+                "id": "citability-good-conversational-tone",
+                "severity": "pass",
+                "title": "Good conversational language detected",
+                "description": (
+                    "Content uses reader-directed language (you/your), questions, "
+                    "and natural connectors that AI models find easy to extract and cite."
+                ),
+            })
+
+    # --- Entity recognition ---
+    # Named entities: capitalized multi-word sequences (excluding sentence starts)
+    # Look for proper nouns mid-sentence
+    entity_pattern = re.findall(
+        r"(?<=[a-z]\s)[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*", all_text
+    )
+    # Defined terms: "X is a/an...", "X refers to..."
+    defined_terms = re.findall(
+        r"([A-Z][A-Za-z\s]{2,30}?)\s+(?:is\s+(?:a|an|the)\s|refers?\s+to\s|means?\s|can\s+be\s+defined\s+as\s)",
+        all_text
+    )
+    # Technical terms in bold or emphasis (from original HTML)
+    raw_soup = BeautifulSoup(resp.text, "lxml")
+    bold_terms = [
+        el.get_text(strip=True) for el in raw_soup.find_all(["strong", "b", "em"])
+        if 1 <= len(el.get_text(strip=True).split()) <= 5
+    ]
+
+    unique_entities = set(entity_pattern + defined_terms + bold_terms)
+    entity_count = len(unique_entities)
+
+    if all_word_count > 300:
+        entity_density = entity_count / (all_word_count / 100)  # per 100 words
+        if entity_density < 0.5:
+            page_findings.append({
+                "id": "citability-low-entity-density",
+                "severity": "medium",
+                "title": "Low named entity density",
+                "description": (
+                    f"Found only {entity_count} distinct named entities across "
+                    f"{all_word_count} words. Content rich in named entities "
+                    "(people, organizations, products, defined terms) is easier for "
+                    "AI models to index, disambiguate, and cite accurately."
+                ),
+            })
+        elif entity_density >= 2.0:
+            page_findings.append({
+                "id": "citability-good-entity-density",
+                "severity": "pass",
+                "title": f"Strong entity coverage ({entity_count} distinct entities)",
+                "description": (
+                    "Content is rich in named entities and defined terms, making it "
+                    "easy for AI models to identify, index, and cite specific claims."
+                ),
+            })
+
+    # --- Semantic topic coverage ---
+    headings = [b["heading"] for b in blocks if b["heading"] != "Introduction"]
+    unique_headings = set(headings)
+
+    if all_word_count > 500:
+        # Check heading diversity: how many distinct subtopics
+        if len(unique_headings) < 3:
+            page_findings.append({
+                "id": "citability-low-topic-coverage",
+                "severity": "medium",
+                "title": f"Narrow topic coverage ({len(unique_headings)} subtopic headings)",
+                "description": (
+                    f"Only {len(unique_headings)} distinct heading(s) found on a "
+                    f"{all_word_count}-word page. Broader topic coverage with more "
+                    "subtopic headings (H2/H3) helps AI models match your content "
+                    "to a wider range of queries and increases citation surface area."
+                ),
+            })
+        elif len(unique_headings) >= 5:
+            page_findings.append({
+                "id": "citability-good-topic-coverage",
+                "severity": "pass",
+                "title": f"Good semantic topic coverage ({len(unique_headings)} subtopics)",
+                "description": (
+                    "Content covers multiple subtopics with distinct headings, "
+                    "increasing the range of AI queries it can answer."
+                ),
+            })
+
+        # Check for heading word overlap (low diversity = repetitive subtopics)
+        if len(unique_headings) >= 3:
+            heading_words = [set(h.lower().split()) for h in unique_headings]
+            # Find words that appear in >60% of headings
+            all_heading_words = {}
+            for word_set in heading_words:
+                for w in word_set:
+                    if len(w) > 3:  # skip short words
+                        all_heading_words[w] = all_heading_words.get(w, 0) + 1
+            repetitive = [
+                w for w, c in all_heading_words.items()
+                if c / len(heading_words) > 0.6 and c >= 3
+            ]
+            if repetitive:
+                page_findings.append({
+                    "id": "citability-repetitive-headings",
+                    "severity": "low",
+                    "title": f"Headings repeat the same terms: {', '.join(repetitive[:3])}",
+                    "description": (
+                        "Multiple headings share the same key terms, which may "
+                        "signal narrow topic coverage. Diversifying heading language "
+                        "helps AI models match your content to varied query phrasings."
+                    ),
+                })
+
     # Add confidence labels
+    HYPOTHESIS_IDS = {
+        "citability-no-data-table", "citability-no-faq-content",
+        "citability-weak-faq-answers", "citability-low-conversational-tone",
+        "citability-low-entity-density", "citability-low-topic-coverage",
+        "citability-repetitive-headings",
+    }
     for f in page_findings:
-        if f["id"] in ("citability-no-data-table", "citability-no-faq-content",
-                        "citability-weak-faq-answers"):
+        if f["id"] in HYPOTHESIS_IDS:
             f["confidence"] = "hypothesis"
         else:
             f["confidence"] = "confirmed"

@@ -10,7 +10,7 @@ We audit 8 dimensions of AI search readiness:
 
 | Dimension | What it measures |
 |-----------|-----------------|
-| **AI Citability** | Can AI models extract and quote your content? Scores each paragraph for citation readiness, detects FAQ/featured snippet patterns. |
+| **AI Citability** | Can AI models extract and quote your content? Scores passages for citation readiness, FAQ/snippet detection, conversational tone, entity density, and semantic topic coverage. |
 | **Crawler Access** | Are the 30+ AI crawlers (GPTBot, ClaudeBot, PerplexityBot, etc.) allowed in your robots.txt? |
 | **llms.txt** | Do you have the llms.txt file that helps AI understand your site? Like robots.txt, but for AI comprehension. |
 | **Structured Data** | Is your JSON-LD schema complete? Checks for Organization, WebSite, and business-specific schemas. |
@@ -128,7 +128,7 @@ geo-audit-skill/
 ├── SKILL.md              # Skill definition and orchestration
 ├── scripts/
 │   ├── fetch_page.py     # Page fetching + platform detection + robots.txt + sitemap + llms.txt
-│   ├── citability.py     # Passage-level AI citation scoring + FAQ/snippet detection
+│   ├── citability.py     # AI citation scoring, FAQ detection, entity/topic analysis
 │   ├── schema_check.py   # JSON-LD detection, validation, and generation
 │   ├── technical_seo.py  # 13 weighted technical checks
 │   ├── eeat.py           # 9 E-E-A-T trust signals
