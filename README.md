@@ -128,7 +128,7 @@ geo-audit-skill/
 ├── SKILL.md              # Skill definition and orchestration
 ├── scripts/
 │   ├── fetch_page.py     # Page fetching + platform detection + robots.txt + sitemap + llms.txt
-│   ├── citability.py     # Passage-level AI citation scoring
+│   ├── citability.py     # Passage-level AI citation scoring + FAQ/snippet detection
 │   ├── schema_check.py   # JSON-LD detection, validation, and generation
 │   ├── technical_seo.py  # 13 weighted technical checks
 │   ├── eeat.py           # 9 E-E-A-T trust signals
