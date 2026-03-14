@@ -202,6 +202,67 @@ Categories to report:
 - Internal linking improvements
 - Any changes to existing source code files
 
+### AI-Powered Suggestions
+
+Use your intelligence as an LLM to generate contextual, site-specific suggestions beyond what the scripts can detect. These go in the report and fix files.
+
+#### 1. Meta Description Rewrites
+For every page with a missing, too-short, or too-long meta description (from technical_seo.py findings):
+- Read the page title, H1, and first 200 words of body content
+- Write an optimized meta description (120-160 characters) that:
+  - Includes the primary topic/keyword naturally
+  - Uses active voice and a clear value proposition
+  - Is compelling enough to earn a click from both search results and AI citations
+- Write the result to `geo-fixes/meta-tags.html` as a ready-to-paste `<meta name="description">` tag with a comment noting which page it's for
+
+#### 2. Alt Text Generation
+For every image flagged as missing alt text (from technical_seo.py):
+- Examine the image `src` filename, surrounding text context, and page topic
+- Write descriptive, specific alt text (10-20 words) that:
+  - Describes what the image shows, not just the topic
+  - Includes relevant keywords naturally (no keyword stuffing)
+  - Avoids starting with "Image of" or "Photo of"
+- Present as a table: | Image src | Suggested alt text |
+
+#### 3. Heading Restructure
+If the page has no H1, multiple H1s, or poor heading structure (from technical_seo.py and citability.py):
+- Analyze the page content and propose a complete heading hierarchy:
+  - One H1 that captures the primary topic
+  - H2s for each major subtopic (aim for 4-8 on content-heavy pages)
+  - H3s for sub-sections where appropriate
+- Frame at least 1-2 headings as questions (for FAQ/snippet eligibility)
+- Present as: Current heading structure → Proposed heading structure
+
+#### 4. FAQ Section Drafting
+If the page has no FAQ/featured-snippet-ready content (from citability.py `citability-no-faq-content`):
+- Identify 3-5 questions that the page content implicitly answers
+- Write each as a Q&A pair:
+  - **Question**: Natural language question a user would ask
+  - **Answer**: 2-3 sentence direct answer, starting with a declarative statement
+- Generate matching FAQPage JSON-LD schema and write to `geo-fixes/schema/faq-page.json`
+- The FAQ content itself goes in the report as a recommendation (not auto-applied)
+
+#### 5. Content Gap Analysis
+Based on the page topic, business type, and existing content:
+- Identify 3-5 subtopics or questions the page does NOT cover but should
+- For each gap:
+  - **Missing topic**: What's not covered
+  - **Why it matters**: How this gap affects AI citability (e.g., "ChatGPT frequently gets asked about X but your page doesn't address it")
+  - **Suggested addition**: A 1-2 sentence description of what to add
+- Consider the business type (SaaS, e-commerce, local, publisher, agency) when identifying gaps — e.g., a SaaS page missing pricing comparisons, or a local business missing service area information
+
+#### 6. Robots.txt Crawler Explainer
+For every blocked AI crawler found in the robots.txt analysis:
+- Explain what the crawler does and who operates it
+- Explain the tradeoff of allowing vs. blocking it:
+  - **If allowed**: What happens (e.g., "Your content may appear in ChatGPT responses with citation links back to your site")
+  - **If blocked**: What you lose (e.g., "Your content won't be indexed by OpenAI's search product")
+- Flag any crawlers that are blocked but probably shouldn't be (e.g., blocking GPTBot but wanting ChatGPT visibility)
+- Flag any crawlers that are allowed but the user might want to block (e.g., training-only crawlers like `cohere-training-data-crawler` or `img2dataset`)
+
+Present this as a table:
+| Crawler | Operator | Status | What it does | Recommendation |
+
 **Content rewrite suggestions** — For the 3-5 weakest citability passages (lowest scores from citability.py), generate a rewritten version that:
 - Starts with a clear declarative sentence (5-30 words) that directly answers the implied question
 - Stays within the optimal 134-167 word passage length
@@ -232,13 +293,13 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> [mode]
 ```
 Modes: `page`, `robots`, `llms`, `sitemap`, `full`
 
-Returns JSON to stdout. Page mode includes: language attribute, viewport meta, Open Graph tags, meta robots, X-Robots-Tag header, response time (ms), and checks 20 AI crawlers.
+Returns JSON to stdout. Page mode includes: language attribute, viewport meta, Open Graph tags, meta robots, X-Robots-Tag header, response time (ms), and checks 32 AI crawlers.
 
 ### citability.py
 ```
 python3 ${CLAUDE_SKILL_DIR}/scripts/citability.py <url>
 ```
-Returns JSON with per-passage citability scores, page-level summary, and structural findings (data table detection, heading structure validation).
+Returns JSON with per-passage citability scores, page-level summary, and structural findings (data table detection, heading structure validation, FAQ/snippet detection, conversational language, entity density, semantic topic coverage).
 
 ### schema_check.py
 ```

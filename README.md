@@ -95,8 +95,9 @@ In Claude Code:
 3. **Runs 8 parallel analyses** via Claude Code subagents — one per dimension
 4. **Reports** findings by dimension with severity levels and confidence labels (Confirmed, Likely, Hypothesis)
 5. **Auto-generates** fix files to `geo-fixes/` — robots.txt, llms.txt, JSON-LD schemas, meta tags
-6. **Suggests rewrites** for the weakest citability passages with before/after examples
-7. **Recommends** code-level changes and waits for your approval before touching source files
+6. **AI-generates** meta descriptions, alt text, heading restructures, FAQ sections, and content gap analysis
+7. **Suggests rewrites** for the weakest citability passages with before/after examples
+8. **Recommends** code-level changes and waits for your approval before touching source files
 
 ## What gets fixed automatically
 
@@ -109,15 +110,27 @@ These files are written directly to `geo-fixes/` in your project:
 - `meta-tags.html` — optimized meta tag snippets
 - `FINDINGS.md` — full audit report in markdown
 
+## AI-powered suggestions
+
+Claude uses the audit data to generate contextual, site-specific recommendations:
+
+- **Meta description rewrites** — optimized 120-160 char descriptions for pages with missing or weak meta tags
+- **Alt text generation** — descriptive alt text based on image filenames and surrounding content
+- **Heading restructure** — proposed H1/H2/H3 hierarchy with FAQ-style question headings
+- **FAQ section drafting** — Q&A pairs the page implicitly answers + ready-to-use FAQPage JSON-LD schema
+- **Content gap analysis** — subtopics and questions the page should cover but doesn't, tailored to business type
+- **Robots.txt crawler explainer** — what each blocked crawler does, the tradeoff, and whether to allow it
+
 ## What needs your approval
 
 These changes are recommended but not made until you say yes:
 
 - Heading structure fixes (H1/H2/H3 hierarchy)
-- Meta description rewrites
+- AI-generated meta description rewrites
 - Content restructuring for better AI citability
 - Passage rewrites for weak citability scores (before/after with reasoning)
-- Alt text for images
+- AI-generated alt text for images
+- FAQ sections and schema markup
 - Internal linking improvements
 - Any edits to your existing source code
 
