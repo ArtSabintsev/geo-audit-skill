@@ -188,6 +188,10 @@ def analyze_platform_readiness(scores):
             "description": description,
         })
 
+    # Add confidence labels
+    for f in findings:
+        f["confidence"] = "likely"
+
     # Overall score = average of all platform scores
     overall_score = round(sum(p["score"] for p in platforms) / len(platforms))
     grade = to_grade(overall_score)

@@ -458,6 +458,10 @@ def analyze_technical_seo(page_data):
     score = round((earned_weight / total_weight) * 100) if total_weight else 0
     grade = to_grade(score)
 
+    # Add confidence labels
+    for f in findings:
+        f["confidence"] = "likely" if f["id"] == "tech-no-ssr" else "confirmed"
+
     passed_count = sum(1 for c in checks if c["passed"])
     summary = f"{passed_count}/{len(checks)} technical checks passed. Score: {score}/100."
 

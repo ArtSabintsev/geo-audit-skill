@@ -312,6 +312,90 @@ def analyze_page(url):
             ),
         })
 
+    # --- FAQ / featured snippet detection ---
+    # Check for Q&A patterns (headings ending with ?)
+    qa_headings = [
+        b["heading"] for b in blocks
+        if b["heading"] and b["heading"].strip().endswith("?")
+    ]
+
+    # Check for definition-style headings ("What is...", "What are...")
+    definition_headings = [
+        b["heading"] for b in blocks
+        if b["heading"] and re.search(
+            r"^(?:what|who|where|when|why|how)\s+", b["heading"], re.I
+        )
+    ]
+
+    # Check for how-to/step lists in content
+    has_step_content = any(
+        re.search(r"(?:step\s+\d|^\d+[\.\)]\s)", b["content"], re.I | re.M)
+        for b in blocks
+    )
+
+    # Check for direct answer blocks (short, declarative first sentences)
+    direct_answers = 0
+    for b in blocks:
+        first_sent = b["content"].split(".")[0] if b["content"] else ""
+        first_words = first_sent.split()
+        if (b["heading"] and b["heading"].strip().endswith("?")
+                and 5 <= len(first_words) <= 30):
+            direct_answers += 1
+
+    faq_signals = len(qa_headings) + len(definition_headings)
+    has_faq_content = faq_signals > 0 or has_step_content
+
+    if total_word_count > 300 and not has_faq_content:
+        page_findings.append({
+            "id": "citability-no-faq-content",
+            "severity": "medium",
+            "title": "No FAQ or featured-snippet-ready content detected",
+            "description": (
+                "No question-answer headings, definition patterns (\"What is...\"), "
+                "or numbered step lists found. Content structured as Q&A or how-to "
+                "steps is significantly more likely to be cited by AI models and "
+                "selected for featured snippets."
+            ),
+        })
+    elif has_faq_content and direct_answers == 0 and qa_headings:
+        page_findings.append({
+            "id": "citability-weak-faq-answers",
+            "severity": "low",
+            "title": "Question headings found but answers may not be concise enough",
+            "description": (
+                f"Found {len(qa_headings)} question heading(s) but no concise "
+                "direct answer sentences immediately following them. AI models "
+                "prefer answers that start with a clear, brief declarative sentence "
+                "(5-30 words) before elaborating."
+            ),
+        })
+
+    if has_faq_content:
+        parts = []
+        if qa_headings:
+            parts.append(f"{len(qa_headings)} Q&A heading(s)")
+        if definition_headings:
+            parts.append(f"{len(definition_headings)} definition heading(s)")
+        if has_step_content:
+            parts.append("step-by-step content")
+        page_findings.append({
+            "id": "citability-faq-found",
+            "severity": "pass",
+            "title": f"Featured snippet-ready content detected: {', '.join(parts)}",
+            "description": (
+                "Content includes patterns that AI models and search engines "
+                "favor for direct answers and featured snippets."
+            ),
+        })
+
+    # Add confidence labels
+    for f in page_findings:
+        if f["id"] in ("citability-no-data-table", "citability-no-faq-content",
+                        "citability-weak-faq-answers"):
+            f["confidence"] = "hypothesis"
+        else:
+            f["confidence"] = "confirmed"
+
     return {
         "url": url,
         "blocks_analyzed": len(scored),

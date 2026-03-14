@@ -322,6 +322,13 @@ def analyze_eeat(page_data):
             "description": signal["detail"],
         })
 
+    # Add confidence labels
+    for f in findings:
+        if any(s in f["id"] for s in ("contact-information", "about-page-link", "schemaorg-authorship")):
+            f["confidence"] = "confirmed"
+        else:
+            f["confidence"] = "likely"
+
     grade = to_grade(score)
     found_count = sum(1 for s in signals if s["found"])
     total_count = len(signals)

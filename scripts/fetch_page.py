@@ -29,10 +29,16 @@ AI_CRAWLERS = [
     "GPTBot", "OAI-SearchBot", "ChatGPT-User",
     "ClaudeBot", "anthropic-ai",
     "PerplexityBot", "CCBot", "Bytespider", "cohere-ai",
-    "Google-Extended", "GoogleOther", "Applebot-Extended",
+    "cohere-training-data-crawler",
+    "Google-Extended", "GoogleOther", "GoogleOther-Image",
+    "GoogleOther-Video", "Applebot-Extended",
     "FacebookBot", "Amazonbot",
     "Meta-ExternalAgent", "Meta-ExternalFetcher",
-    "YouBot", "AI2Bot", "Diffbot", "ImagesiftBot",
+    "YouBot", "AI2Bot", "Ai2Bot-Dolma",
+    "Diffbot", "ImagesiftBot",
+    "aiHitBot", "DuckAssistBot", "img2dataset",
+    "MyCentralAIScraperBot", "omgili", "omgilibot",
+    "Quora-Bot", "TikTokSpider",
 ]
 
 SECURITY_HEADERS = [

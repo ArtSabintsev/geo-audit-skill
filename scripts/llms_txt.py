@@ -231,6 +231,10 @@ def analyze_llms_txt(llms_data, page_data=None):
                 ),
             })
 
+    # Add confidence labels
+    for f in findings:
+        f["confidence"] = "confirmed"
+
     score = max(0, min(100, score))
     grade = to_grade(score)
 

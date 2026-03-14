@@ -72,10 +72,11 @@ Launch these 8 analyses simultaneously using the Agent tool:
 - Detects comparison patterns, how-to/instructional content, cause-effect language
 - Enhanced self-containment: flags dangling pronouns, context-reference phrases
 - Page-level findings: data table detection (>500 word pages), heading structure validation (>50% blocks without headings)
+- FAQ/featured snippet detection: Q&A headings, definition patterns ("What is..."), numbered step lists, direct answer quality
 
 #### Agent 2: AI Crawler Access + llms.txt Quality
 - Parse robots.txt results from Phase 1 fetch data
-- Check status of these AI crawlers: GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, anthropic-ai, PerplexityBot, CCBot, Bytespider, cohere-ai, Google-Extended, GoogleOther, Applebot-Extended, FacebookBot, Amazonbot, Meta-ExternalAgent, Meta-ExternalFetcher, YouBot, AI2Bot, Diffbot, ImagesiftBot
+- Check status of these AI crawlers: GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, anthropic-ai, PerplexityBot, CCBot, Bytespider, cohere-ai, cohere-training-data-crawler, Google-Extended, GoogleOther, GoogleOther-Image, GoogleOther-Video, Applebot-Extended, FacebookBot, Amazonbot, Meta-ExternalAgent, Meta-ExternalFetcher, YouBot, AI2Bot, Ai2Bot-Dolma, Diffbot, ImagesiftBot, aiHitBot, DuckAssistBot, img2dataset, MyCentralAIScraperBot, omgili, omgilibot, Quora-Bot, TikTokSpider
 - Run llms.txt quality scorer:
   ```bash
   python3 ${CLAUDE_SKILL_DIR}/scripts/llms_txt.py <url>
@@ -162,6 +163,10 @@ Launch these 8 analyses simultaneously using the Agent tool:
 Present findings grouped by category. For each category:
 - Current state (what exists now)
 - Issues found (with severity: Critical / High / Medium / Low)
+- Confidence label for each finding:
+  - **Confirmed** — directly verified (e.g., missing HTTPS, no H1 tag, absent robots.txt entry)
+  - **Likely** — based on heuristic analysis (e.g., SSR detection, regex-based E-E-A-T signals, composite platform scores)
+  - **Hypothesis** — suggested improvement, may not apply to every site (e.g., missing data tables, FAQ content suggestions)
 - Specific findings with evidence
 
 **Do NOT compute a weighted composite score.** Report each category independently. Let the user interpret priorities.
@@ -193,6 +198,18 @@ Categories to report:
 - Alt text additions for images
 - Internal linking improvements
 - Any changes to existing source code files
+
+**Content rewrite suggestions** — For the 3-5 weakest citability passages (lowest scores from citability.py), generate a rewritten version that:
+- Starts with a clear declarative sentence (5-30 words) that directly answers the implied question
+- Stays within the optimal 134-167 word passage length
+- Replaces dangling pronouns with proper nouns
+- Adds statistical density where appropriate (numbers, percentages, named sources)
+- Structures as Q&A, definition, or how-to format when the topic allows
+
+Present each rewrite as:
+- **Original** (first 50 words + score)
+- **Suggested rewrite** (full passage)
+- **Why** (which citability factors improve)
 
 Present code-level recommendations as a numbered list with:
 - File path (if in a repo context)

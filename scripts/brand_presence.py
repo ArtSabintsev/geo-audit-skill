@@ -305,6 +305,10 @@ def analyze_brand_presence(page_data):
             ),
         })
 
+    # Add confidence labels
+    for f in findings:
+        f["confidence"] = "confirmed"
+
     # --- Calculate score ---
     score = 0
 
