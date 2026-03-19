@@ -59,9 +59,9 @@ allowed-tools: Read, Grep, Glob, Bash, WebFetch, Write, Edit, Agent
    - Product/service pages
    - Pricing page (if SaaS)
 
-### Phase 2: Parallel Analysis (8 Subagents)
+### Phase 2: Parallel Analysis (11 Subagents)
 
-Launch these 8 analyses simultaneously using the Agent tool:
+Launch these 11 analyses simultaneously using the Agent tool:
 
 #### Agent 1: AI Citability + Content Quality
 - Run citability scorer on up to 10 key pages:
@@ -76,6 +76,8 @@ Launch these 8 analyses simultaneously using the Agent tool:
 - Conversational language scoring: second-person pronouns, questions, contractions, natural connectors
 - Entity recognition: named entity density, defined terms, bold/emphasis terms
 - Semantic topic coverage: heading diversity, subtopic breadth, repetitive heading detection
+- LLM chunk-size scoring: checks if passages match ~500-token retrieval window sizes (optimal 225-415 words), flags oversized blocks (>600 words)
+- Keyword density check: extracts primary keyword from title/H1, flags stuffing (>3%) or underuse (<0.5%)
 
 #### Agent 2: AI Crawler Access + llms.txt Quality
 - Parse robots.txt results from Phase 1 fetch data
@@ -161,6 +163,50 @@ Launch these 8 analyses simultaneously using the Agent tool:
   - GitHub presence (if relevant)
   - Industry directories
 
+#### Agent 9: Search Intent Classification
+- Run the search intent classifier:
+  ```bash
+  python3 ${CLAUDE_SKILL_DIR}/scripts/search_intent.py <url>
+  ```
+  Or pipe Phase 1 data:
+  ```bash
+  python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full | python3 ${CLAUDE_SKILL_DIR}/scripts/search_intent.py
+  ```
+- Classifies page into intent categories: informational, commercial, transactional, navigational
+- Detects page type: article, product, pricing, comparison, service, homepage, about, support, general
+- Checks intent-page type alignment — mismatches hurt AI citation
+- Intent-specific recommendations (e.g., question headings for informational, comparison tables for commercial)
+- Signals detected: URL structure, heading patterns, content patterns, CTA language, price elements
+
+#### Agent 10: Content Freshness
+- Run the content freshness scorer:
+  ```bash
+  python3 ${CLAUDE_SKILL_DIR}/scripts/content_freshness.py <url>
+  ```
+  Or pipe Phase 1 data:
+  ```bash
+  python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full | python3 ${CLAUDE_SKILL_DIR}/scripts/content_freshness.py
+  ```
+- Parses dates from 5 sources: meta tags (article:published_time, article:modified_time), JSON-LD (datePublished, dateModified), `<time>` elements, visible text ("Published on...", "Updated..."), HTTP Last-Modified header
+- Calculates content age in days from the most recent date
+- Scoring: <30 days = 100, <90 days = 85, <180 days = 70, <365 days = 55, <2 years = 35, older = 15
+- Flags: no dates found, stale content (>1 year), published date without modified date, no visible date on page
+
+#### Agent 11: Internal Link Structure
+- Run the internal link analyzer:
+  ```bash
+  python3 ${CLAUDE_SKILL_DIR}/scripts/internal_links.py <url>
+  ```
+  Or pipe Phase 1 data (includes sitemap for coverage check):
+  ```bash
+  python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full | python3 ${CLAUDE_SKILL_DIR}/scripts/internal_links.py
+  ```
+- Link density: internal links per 1000 words (target: 5-15)
+- Anchor text quality: flags generic anchors ("click here", "read more", empty text)
+- Link diversity: ratio of unique destinations to total links
+- Hub pattern detection: checks if page links to related content in the same section (hub-and-spoke topology)
+- Sitemap coverage: how many sitemap pages are reachable via internal links from this page
+
 ### Phase 3: Report
 
 Present findings grouped by category. For each category:
@@ -183,6 +229,9 @@ Categories to report:
 6. Content Quality & E-E-A-T
 7. Brand Presence
 8. Platform Readiness
+9. Search Intent
+10. Content Freshness
+11. Internal Link Structure
 
 ### Phase 4: Autofix
 
@@ -299,7 +348,7 @@ Returns JSON to stdout. Page mode includes: language attribute, viewport meta, O
 ```
 python3 ${CLAUDE_SKILL_DIR}/scripts/citability.py <url>
 ```
-Returns JSON with per-passage citability scores, page-level summary, and structural findings (data table detection, heading structure validation, FAQ/snippet detection, conversational language, entity density, semantic topic coverage).
+Returns JSON with per-passage citability scores, page-level summary, and structural findings (data table detection, heading structure validation, FAQ/snippet detection, conversational language, entity density, semantic topic coverage, LLM chunk-size scoring, keyword density).
 
 ### schema_check.py
 ```
@@ -357,6 +406,36 @@ echo '{"schema":72,"eeat":65,"citability":80,"llms_txt":45,"technical_seo":90,"b
   | python3 ${CLAUDE_SKILL_DIR}/scripts/platform_readiness.py
 ```
 Returns JSON with per-platform readiness scores (Google AI Overviews, ChatGPT, Claude, Perplexity, Gemini), recommendations, and overall score.
+
+### search_intent.py
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/search_intent.py <url>
+```
+Or pipe from fetch_page.py:
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full | python3 ${CLAUDE_SKILL_DIR}/scripts/search_intent.py
+```
+Returns JSON with primary/secondary intent classification (informational, commercial, transactional, navigational), confidence level, detected page type, intent-page alignment check, and intent-specific findings.
+
+### content_freshness.py
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/content_freshness.py <url>
+```
+Or pipe from fetch_page.py:
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full | python3 ${CLAUDE_SKILL_DIR}/scripts/content_freshness.py
+```
+Returns JSON with dates found (from meta tags, JSON-LD, `<time>` elements, visible text, HTTP headers), content age, freshness score, grade, and findings.
+
+### internal_links.py
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/internal_links.py <url>
+```
+Or pipe from fetch_page.py:
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full | python3 ${CLAUDE_SKILL_DIR}/scripts/internal_links.py
+```
+Returns JSON with link density, anchor text quality, link diversity, hub pattern detection, sitemap coverage, score, grade, and findings.
 
 ---
 

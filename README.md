@@ -6,11 +6,11 @@ A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill that check
 
 ## What it checks
 
-We audit 8 dimensions of AI search readiness:
+We audit 11 dimensions of AI search readiness:
 
 | Dimension | What it measures |
 |-----------|-----------------|
-| **AI Citability** | Can AI models extract and quote your content? Scores passages for citation readiness, FAQ/snippet detection, conversational tone, entity density, and semantic topic coverage. |
+| **AI Citability** | Can AI models extract and quote your content? Scores passages for citation readiness, FAQ/snippet detection, conversational tone, entity density, semantic topic coverage, LLM chunk sizing, and keyword density. |
 | **Crawler Access** | Are the 30+ AI crawlers (GPTBot, ClaudeBot, PerplexityBot, etc.) allowed in your robots.txt? |
 | **llms.txt** | Do you have the llms.txt file that helps AI understand your site? Like robots.txt, but for AI comprehension. |
 | **Structured Data** | Is your JSON-LD schema complete? Checks for Organization, WebSite, and business-specific schemas. |
@@ -18,6 +18,9 @@ We audit 8 dimensions of AI search readiness:
 | **E-E-A-T Signals** | 9 trust signals: author bylines, credentials, publication dates, citations, contact info, and more. |
 | **Brand Presence** | Social profiles, review platforms (G2, Trustpilot), About page, press page, Schema.org sameAs links. |
 | **Platform Readiness** | Per-engine scores for Google AI Overviews, ChatGPT, Claude, Perplexity, and Gemini. |
+| **Search Intent** | Is your page type aligned with its search intent? Classifies pages as informational, commercial, transactional, or navigational and flags mismatches. |
+| **Content Freshness** | How old is your content? Detects dates from meta tags, JSON-LD, visible text, and HTTP headers. Flags stale content that AI models may deprioritize. |
+| **Internal Links** | Is your content well-connected? Checks link density, anchor text quality, hub-and-spoke patterns, and sitemap coverage. |
 
 <details>
 <summary><strong>Full list of 32 AI crawlers checked</strong></summary>
@@ -92,7 +95,7 @@ In Claude Code:
 
 1. **Fetches** your homepage, robots.txt, sitemap, and llms.txt
 2. **Detects** your platform (WordPress, Squarespace, Wix, etc.) and business type (SaaS, e-commerce, local, publisher, agency)
-3. **Runs 8 parallel analyses** via Claude Code subagents — one per dimension
+3. **Runs 11 parallel analyses** via Claude Code subagents — one per dimension
 4. **Reports** findings by dimension with severity levels and confidence labels (Confirmed, Likely, Hypothesis)
 5. **Auto-generates** fix files to `geo-fixes/` — robots.txt, llms.txt, JSON-LD schemas, meta tags
 6. **AI-generates** meta descriptions, alt text, heading restructures, FAQ sections, and content gap analysis
@@ -141,13 +144,16 @@ geo-audit-skill/
 ├── SKILL.md              # Skill definition and orchestration
 ├── scripts/
 │   ├── fetch_page.py     # Page fetching + platform detection + robots.txt + sitemap + llms.txt
-│   ├── citability.py     # AI citation scoring, FAQ detection, entity/topic analysis
+│   ├── citability.py     # AI citation scoring, FAQ detection, entity/topic analysis, chunk sizing, keyword density
 │   ├── schema_check.py   # JSON-LD detection, validation, and generation
 │   ├── technical_seo.py  # 13 weighted technical checks
 │   ├── eeat.py           # 9 E-E-A-T trust signals
 │   ├── brand_presence.py # Social, review, and brand page detection
 │   ├── llms_txt.py       # llms.txt quality and spec compliance
-│   └── platform_readiness.py  # Per-AI-engine readiness scores
+│   ├── platform_readiness.py  # Per-AI-engine readiness scores
+│   ├── search_intent.py  # Search intent classification + page type alignment
+│   ├── content_freshness.py   # Publication/modification date detection + staleness scoring
+│   └── internal_links.py # Link density, anchor quality, hub patterns, sitemap coverage
 ├── templates/
 │   ├── llms.txt.j2       # llms.txt generation template
 │   └── schema/           # JSON-LD templates by business type

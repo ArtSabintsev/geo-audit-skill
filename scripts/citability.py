@@ -483,6 +483,148 @@ def analyze_page(url):
                 ),
             })
 
+    # --- LLM chunk-size scoring ---
+    # LLM retrieval windows are typically ~500 tokens (~375 words).
+    # Content structured in retrieval-friendly chunks is more likely to be
+    # extracted and cited in full.
+    CHUNK_OPTIMAL_MIN = 225  # words (~300 tokens)
+    CHUNK_OPTIMAL_MAX = 415  # words (~550 tokens)
+    CHUNK_OVERSIZED = 600    # words (~800 tokens) — should be split
+
+    optimal_chunks = 0
+    oversized_chunks = 0
+    undersized_chunks = 0
+    for b in scored:
+        wc = b["word_count"]
+        if CHUNK_OPTIMAL_MIN <= wc <= CHUNK_OPTIMAL_MAX:
+            optimal_chunks += 1
+        elif wc > CHUNK_OVERSIZED:
+            oversized_chunks += 1
+        elif wc < 80:
+            undersized_chunks += 1
+
+    if len(scored) >= 3:
+        optimal_ratio = optimal_chunks / len(scored)
+        if optimal_ratio >= 0.5:
+            page_findings.append({
+                "id": "citability-good-chunk-size",
+                "severity": "pass",
+                "title": f"{optimal_chunks}/{len(scored)} passages are LLM-retrieval-friendly size",
+                "description": (
+                    f"{round(optimal_ratio * 100)}% of content blocks are in the "
+                    "optimal 225-415 word range (~300-550 tokens), matching typical "
+                    "LLM retrieval window sizes. This increases the chance that "
+                    "AI models extract and cite complete passages."
+                ),
+            })
+        elif optimal_ratio < 0.25:
+            page_findings.append({
+                "id": "citability-poor-chunk-size",
+                "severity": "medium",
+                "title": f"Only {optimal_chunks}/{len(scored)} passages match LLM retrieval window size",
+                "description": (
+                    f"Only {round(optimal_ratio * 100)}% of content blocks are in the "
+                    "optimal 225-415 word range (~300-550 tokens). LLM retrieval "
+                    "systems work best when content is structured in ~500-token "
+                    "chunks. Reorganize sections to fit this range."
+                ),
+            })
+
+        if oversized_chunks > 0:
+            page_findings.append({
+                "id": "citability-oversized-chunks",
+                "severity": "low",
+                "title": f"{oversized_chunks} content block(s) exceed 600 words",
+                "description": (
+                    f"{oversized_chunks} passage(s) are too long for a single "
+                    "LLM retrieval window. Split these into focused sub-sections "
+                    "with their own headings so AI models can extract specific "
+                    "answers without truncation."
+                ),
+            })
+
+    # --- Keyword density ---
+    # Extract the likely primary keyword from the page title or H1
+    title_el = raw_soup.find("title")
+    title_text = title_el.get_text(strip=True) if title_el else ""
+    h1_el = raw_soup.find("h1")
+    h1_text = h1_el.get_text(strip=True) if h1_el else ""
+    keyword_source = h1_text or title_text
+
+    if keyword_source and all_word_count >= 100:
+        # Extract 2-3 word phrases from title/H1 as keyword candidates
+        kw_words = re.findall(r"[a-z]+", keyword_source.lower())
+        # Filter out stop words
+        stop_words = {
+            "a", "an", "the", "is", "are", "was", "were", "be", "been",
+            "being", "in", "on", "at", "to", "for", "of", "with", "by",
+            "and", "or", "but", "not", "no", "so", "if", "how", "what",
+            "when", "where", "why", "who", "which", "that", "this",
+            "from", "as", "it", "its", "your", "our", "my", "we", "you",
+            "do", "does", "did", "has", "have", "had", "can", "will",
+        }
+        kw_meaningful = [w for w in kw_words if w not in stop_words and len(w) > 2]
+
+        if kw_meaningful:
+            # Try bigrams first, fall back to top single keyword
+            best_keyword = None
+            best_density = 0
+            text_lower = all_text.lower()
+
+            # Check bigrams
+            for i in range(len(kw_meaningful) - 1):
+                bigram = f"{kw_meaningful[i]} {kw_meaningful[i+1]}"
+                count = len(re.findall(re.escape(bigram), text_lower))
+                if count > 0:
+                    density = (count * 2) / all_word_count * 100
+                    if density > best_density:
+                        best_keyword = bigram
+                        best_density = density
+
+            # Check single keywords if no bigram found
+            if not best_keyword:
+                for kw in kw_meaningful[:3]:
+                    count = len(re.findall(r"\b" + re.escape(kw) + r"\b", text_lower))
+                    density = count / all_word_count * 100
+                    if density > best_density:
+                        best_keyword = kw
+                        best_density = density
+
+            if best_keyword and best_density > 3.0:
+                page_findings.append({
+                    "id": "citability-keyword-stuffing",
+                    "severity": "medium",
+                    "title": f"Keyword stuffing detected: \"{best_keyword}\" at {best_density:.1f}% density",
+                    "description": (
+                        f"The keyword \"{best_keyword}\" appears at {best_density:.1f}% "
+                        "density, exceeding the 3% threshold. Keyword stuffing can cause "
+                        "AI models to view content as low-quality or spammy. Use natural "
+                        "language variations and synonyms instead of repeating the same phrase."
+                    ),
+                })
+            elif best_keyword and best_density < 0.5 and all_word_count >= 300:
+                page_findings.append({
+                    "id": "citability-low-keyword-density",
+                    "severity": "low",
+                    "title": f"Very low keyword density: \"{best_keyword}\" at {best_density:.1f}%",
+                    "description": (
+                        f"The primary keyword \"{best_keyword}\" appears at only "
+                        f"{best_density:.1f}% density. While keyword stuffing should "
+                        "be avoided, the primary topic keyword should appear naturally "
+                        "throughout the content (0.5-3% is typical)."
+                    ),
+                })
+            elif best_keyword and 0.5 <= best_density <= 3.0:
+                page_findings.append({
+                    "id": "citability-good-keyword-density",
+                    "severity": "pass",
+                    "title": f"Healthy keyword density: \"{best_keyword}\" at {best_density:.1f}%",
+                    "description": (
+                        f"The keyword \"{best_keyword}\" is used at a natural "
+                        f"{best_density:.1f}% density — within the optimal 0.5-3% range."
+                    ),
+                })
+
     # --- Semantic topic coverage ---
     headings = [b["heading"] for b in blocks if b["heading"] != "Introduction"]
     unique_headings = set(headings)
@@ -542,7 +684,9 @@ def analyze_page(url):
         "citability-no-data-table", "citability-no-faq-content",
         "citability-weak-faq-answers", "citability-low-conversational-tone",
         "citability-low-entity-density", "citability-low-topic-coverage",
-        "citability-repetitive-headings",
+        "citability-repetitive-headings", "citability-poor-chunk-size",
+        "citability-oversized-chunks", "citability-keyword-stuffing",
+        "citability-low-keyword-density",
     }
     for f in page_findings:
         if f["id"] in HYPOTHESIS_IDS:
