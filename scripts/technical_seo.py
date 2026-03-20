@@ -2,7 +2,7 @@
 """
 Technical SEO analyzer for GEO audit.
 
-Runs 13 weighted checks that affect how AI crawlers index and understand pages:
+Runs 18 weighted checks that affect how AI crawlers index and understand pages:
  1. HTTPS                    (weight 15)
  2. Redirect chain <=2       (weight 10)
  3. Canonical tag            (weight 10)
@@ -16,6 +16,11 @@ Runs 13 weighted checks that affect how AI crawlers index and understand pages:
 11. Open Graph tags          (weight  5)
 12. Response time < 3s       (weight  5)
 13. Image alt text >= 80%    (weight  5)
+14. Twitter Cards            (weight  5)
+15. URL structure            (weight  5)
+16. Image optimization       (weight  5)
+17. Hreflang validation      (weight  5)
+18. Structured data in JS    (weight  5)
 
 Accepts a URL as argument (fetches the page itself) or reads fetch_page.py
 JSON from stdin.
@@ -70,6 +75,8 @@ def fetch_page_data(url, timeout=30):
         "security_headers": {}, "images": [],
         "language": None, "viewport": None, "og_tags": {},
         "response_time_ms": None, "errors": [],
+        "twitter_cards": {}, "hreflang_links": [],
+        "raw_html": "",
     }
     try:
         t0 = _time.monotonic()
@@ -105,6 +112,8 @@ def fetch_page_data(url, timeout=30):
                 result["description"] = content
             if name.lower() == "viewport":
                 result["viewport"] = content
+            if name.lower().startswith("twitter:") and content:
+                result["twitter_cards"][name.lower()] = content
 
         # OG tags
         for meta in soup.find_all("meta", attrs={"property": True}):
@@ -132,7 +141,23 @@ def fetch_page_data(url, timeout=30):
             result["images"].append({
                 "src": img.get("src", ""),
                 "alt": img.get("alt", ""),
+                "width": img.get("width"),
+                "height": img.get("height"),
+                "loading": img.get("loading"),
+                "srcset": img.get("srcset"),
+                "sizes": img.get("sizes"),
+                "fetchpriority": img.get("fetchpriority"),
             })
+
+        # Hreflang links
+        for link in raw_soup.find_all("link", attrs={"hreflang": True}):
+            result["hreflang_links"].append({
+                "hreflang": link.get("hreflang", ""),
+                "href": link.get("href", ""),
+            })
+
+        # Raw HTML for structured data checks
+        result["raw_html"] = resp.text
 
         # SSR check
         for root in raw_soup.find_all(id=re.compile(r"(app|root|__next|__nuxt)", re.I)):
@@ -147,7 +172,7 @@ def fetch_page_data(url, timeout=30):
 
 def analyze_technical_seo(page_data):
     """
-    Run 13 technical SEO checks.
+    Run 18 technical SEO checks.
 
     page_data must have fields matching fetch_page.py output.
     """
@@ -452,6 +477,213 @@ def analyze_technical_seo(page_data):
             ),
         })
 
+    # --- 14. Twitter Cards ---
+    twitter_cards = page_data.get("twitter_cards", {})
+    if not twitter_cards:
+        # Fall back to scanning meta_tags dict if present (e.g. from fetch_page.py)
+        meta_tags = page_data.get("meta_tags", {})
+        if isinstance(meta_tags, dict):
+            for key, value in meta_tags.items():
+                if key.startswith("twitter:") and value:
+                    twitter_cards[key] = value
+    has_twitter_card = bool(twitter_cards.get("twitter:card"))
+    twitter_ok = has_twitter_card
+    checks.append({"name": "Twitter Cards", "passed": twitter_ok, "weight": 5})
+    if not twitter_cards:
+        findings.append({
+            "id": "tech-no-twitter-cards",
+            "dimension": "technical_seo",
+            "severity": "low",
+            "title": "No Twitter Card meta tags found",
+            "description": (
+                "No twitter:card meta tag found. Twitter Cards control how your "
+                "content appears when shared on X/Twitter and are used by some "
+                "AI models as a metadata signal. Add at minimum a twitter:card tag."
+            ),
+        })
+    elif not has_twitter_card:
+        findings.append({
+            "id": "tech-incomplete-twitter-cards",
+            "dimension": "technical_seo",
+            "severity": "low",
+            "title": "Twitter Card tags present but missing twitter:card type",
+            "description": (
+                "Found Twitter meta tags but the required twitter:card type tag "
+                "is missing. Without it, the card may not render correctly. "
+                "Add <meta name=\"twitter:card\" content=\"summary_large_image\">."
+            ),
+        })
+
+    # --- 15. URL Structure ---
+    parsed_url = urlparse(url)
+    url_path = parsed_url.path
+    url_path_len = len(url_path)
+    url_too_long = url_path_len > 100
+    url_not_clean = bool(re.search(r'[ A-Z_]', url_path))
+    url_ok = not url_too_long and not url_not_clean
+    checks.append({"name": "URL structure", "passed": url_ok, "weight": 5})
+    if url_too_long:
+        findings.append({
+            "id": "tech-url-too-long",
+            "dimension": "technical_seo",
+            "severity": "low",
+            "title": f"URL path is too long ({url_path_len} characters)",
+            "description": (
+                f"The URL path is {url_path_len} characters long (over 100). "
+                "Shorter, descriptive URLs are easier for AI models to parse "
+                "and for users to read. Consider shortening the path."
+            ),
+        })
+    if url_not_clean:
+        issues = []
+        if re.search(r'[A-Z]', url_path):
+            issues.append("uppercase letters")
+        if "_" in url_path:
+            issues.append("underscores")
+        if " " in url_path:
+            issues.append("spaces")
+        findings.append({
+            "id": "tech-url-not-clean",
+            "dimension": "technical_seo",
+            "severity": "low",
+            "title": f"URL path contains {', '.join(issues)}",
+            "description": (
+                f"The URL path contains {', '.join(issues)}. Use lowercase "
+                "letters and hyphens for word separators. Clean URLs are easier "
+                "for crawlers to process and less error-prone."
+            ),
+        })
+
+    # --- 16. Image Optimization ---
+    if total_images > 0:
+        imgs_no_dims = sum(
+            1 for img in images
+            if not (img.get("width") and img.get("height"))
+        )
+        first_img_lazy = (
+            images[0].get("loading", "").lower() == "lazy"
+            if images else False
+        )
+        imgs_no_srcset = sum(1 for img in images if not img.get("srcset"))
+        img_opt_ok = imgs_no_dims == 0 and not first_img_lazy and imgs_no_srcset < total_images
+    else:
+        imgs_no_dims = 0
+        first_img_lazy = False
+        imgs_no_srcset = 0
+        img_opt_ok = True
+    checks.append({"name": "Image optimization", "passed": img_opt_ok, "weight": 5})
+    if imgs_no_dims > 0:
+        findings.append({
+            "id": "tech-images-no-dimensions",
+            "dimension": "technical_seo",
+            "severity": "low",
+            "title": f"{imgs_no_dims} image{'s' if imgs_no_dims != 1 else ''} missing width/height attributes",
+            "description": (
+                f"{imgs_no_dims} of {total_images} images lack explicit width and "
+                "height attributes. This causes Cumulative Layout Shift (CLS) which "
+                "hurts Core Web Vitals. Add width and height to all <img> tags."
+            ),
+        })
+    if first_img_lazy:
+        findings.append({
+            "id": "tech-images-lazy-first",
+            "dimension": "technical_seo",
+            "severity": "low",
+            "title": "First image has loading=\"lazy\" (likely above-the-fold)",
+            "description": (
+                "The first image on the page uses loading=\"lazy\", but it is likely "
+                "above the fold and should load eagerly. Remove the lazy attribute from "
+                "the first image or use fetchpriority=\"high\" instead."
+            ),
+        })
+    if total_images > 0 and imgs_no_srcset == total_images:
+        findings.append({
+            "id": "tech-images-no-srcset",
+            "dimension": "technical_seo",
+            "severity": "low",
+            "title": "No images use srcset for responsive loading",
+            "description": (
+                "None of the images on the page use the srcset attribute for "
+                "responsive image loading. Adding srcset allows browsers to pick "
+                "optimal image sizes, improving performance on mobile devices."
+            ),
+        })
+
+    # --- 17. Hreflang Validation ---
+    hreflang_links = page_data.get("hreflang_links", [])
+    if hreflang_links:
+        # Validate self-referencing tag
+        page_url_normalized = url.rstrip("/")
+        has_self_ref = any(
+            hl.get("href", "").rstrip("/") == page_url_normalized
+            for hl in hreflang_links
+        )
+        # Validate language codes (ISO 639-1: 2-letter, optionally with region)
+        invalid_codes = []
+        for hl in hreflang_links:
+            code = hl.get("hreflang", "")
+            if code.lower() == "x-default":
+                continue
+            if not re.match(r'^[a-z]{2}(-[a-zA-Z]{2,})?$', code):
+                invalid_codes.append(code)
+        hreflang_ok = has_self_ref and len(invalid_codes) == 0
+    else:
+        # No hreflang tags — neutral pass (not every page needs them)
+        hreflang_ok = True
+        has_self_ref = True
+        invalid_codes = []
+    checks.append({"name": "Hreflang validation", "passed": hreflang_ok, "weight": 5})
+    if hreflang_links and not has_self_ref:
+        findings.append({
+            "id": "tech-hreflang-no-self-ref",
+            "dimension": "technical_seo",
+            "severity": "medium",
+            "title": "Hreflang tags missing self-referencing entry",
+            "description": (
+                "The page has hreflang tags but none points back to itself. "
+                "Every page with hreflang should include a self-referencing tag "
+                "for its own URL and language. This is required for correct "
+                "internationalization signaling."
+            ),
+        })
+    if invalid_codes:
+        findings.append({
+            "id": "tech-hreflang-invalid-code",
+            "dimension": "technical_seo",
+            "severity": "medium",
+            "title": f"Invalid hreflang language code{'s' if len(invalid_codes) != 1 else ''}: {', '.join(invalid_codes)}",
+            "description": (
+                f"Found invalid hreflang language codes: {', '.join(invalid_codes)}. "
+                "Hreflang values must be valid ISO 639-1 two-letter language codes, "
+                "optionally followed by a region (e.g. en, en-US, de-AT)."
+            ),
+        })
+
+    # --- 18. Structured Data in JS Only ---
+    raw_html = page_data.get("raw_html", "")
+    has_jsonld_in_html = bool(re.search(
+        r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>',
+        raw_html, re.I
+    )) if raw_html else False
+    ssr_content = page_data.get("has_ssr_content", True)
+    # Flag only if page lacks SSR content AND no JSON-LD in static HTML
+    schema_in_js = not ssr_content and not has_jsonld_in_html
+    schema_js_ok = not schema_in_js
+    checks.append({"name": "Structured data in JS", "passed": schema_js_ok, "weight": 5})
+    if schema_in_js:
+        findings.append({
+            "id": "tech-schema-in-js-only",
+            "dimension": "technical_seo",
+            "severity": "high",
+            "title": "Structured data may only exist in client-side JavaScript",
+            "description": (
+                "The page appears to be client-side rendered and has no JSON-LD "
+                "structured data in the static HTML. AI crawlers that do not "
+                "execute JavaScript will miss both the page content and its "
+                "structured data. Add JSON-LD <script> blocks to the server-rendered HTML."
+            ),
+        })
+
     # --- Calculate score ---
     total_weight = sum(c["weight"] for c in checks)
     earned_weight = sum(c["weight"] for c in checks if c["passed"])
@@ -459,8 +691,9 @@ def analyze_technical_seo(page_data):
     grade = to_grade(score)
 
     # Add confidence labels
+    _likely_findings = {"tech-no-ssr", "tech-schema-in-js-only"}
     for f in findings:
-        f["confidence"] = "likely" if f["id"] == "tech-no-ssr" else "confirmed"
+        f["confidence"] = "likely" if f["id"] in _likely_findings else "confirmed"
 
     passed_count = sum(1 for c in checks if c["passed"])
     summary = f"{passed_count}/{len(checks)} technical checks passed. Score: {score}/100."

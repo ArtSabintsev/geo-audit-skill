@@ -26,9 +26,9 @@ RECOMMENDED_SCHEMAS = {
     "saas": ["Organization", "SoftwareApplication", "WebSite", "FAQPage", "BreadcrumbList"],
     "ecommerce": ["Organization", "Product", "Offer", "AggregateRating", "BreadcrumbList", "WebSite"],
     "local": ["LocalBusiness", "GeoCoordinates", "PostalAddress", "OpeningHoursSpecification", "WebSite"],
-    "publisher": ["Organization", "Article", "Person", "BreadcrumbList", "WebSite", "SearchAction"],
+    "publisher": ["Organization", "Article", "Person", "BreadcrumbList", "WebSite", "SearchAction", "SpeakableSpecification", "HowTo"],
     "agency": ["Organization", "Service", "WebSite", "BreadcrumbList", "FAQPage"],
-    "other": ["Organization", "WebSite", "BreadcrumbList"],
+    "other": ["Organization", "WebSite", "BreadcrumbList", "HowTo"],
 }
 
 # Required properties per schema type
@@ -43,6 +43,8 @@ REQUIRED_PROPS = {
     "FAQPage": ["mainEntity"],
     "BreadcrumbList": ["itemListElement"],
     "Service": ["name", "provider"],
+    "SpeakableSpecification": ["cssSelector"],
+    "HowTo": ["name", "step"],
 }
 
 

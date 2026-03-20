@@ -59,8 +59,9 @@ def fetch_page(url, timeout=30):
         "structured_data": [], "has_ssr_content": True,
         "security_headers": {}, "errors": [],
         "language": None, "viewport": None,
-        "og_tags": {}, "meta_robots": None, "x_robots_tag": None,
-        "response_time_ms": None,
+        "og_tags": {}, "twitter_cards": {}, "meta_robots": None,
+        "x_robots_tag": None, "response_time_ms": None,
+        "hreflang_links": [],
     }
 
     result["detected_platform"] = None
@@ -115,9 +116,26 @@ def fetch_page(url, timeout=30):
             if prop.startswith("og:") and content:
                 result["og_tags"][prop] = content
 
+        # Twitter Card tags
+        for meta in soup.find_all("meta", attrs={"name": True}):
+            name = meta.get("name", "")
+            content = meta.get("content", "")
+            if name.startswith("twitter:") and content:
+                result["twitter_cards"][name] = content
+
         # Canonical
         link = soup.find("link", rel="canonical")
         result["canonical"] = link.get("href") if link else None
+
+        # Hreflang links
+        for link in soup.find_all("link", rel="alternate"):
+            hreflang = link.get("hreflang")
+            href = link.get("href")
+            if hreflang and href:
+                result["hreflang_links"].append({
+                    "hreflang": hreflang,
+                    "href": href,
+                })
 
         # Headings
         for level in range(1, 7):
@@ -151,6 +169,11 @@ def fetch_page(url, timeout=30):
                 "src": img.get("src", ""),
                 "alt": img.get("alt", ""),
                 "loading": img.get("loading"),
+                "width": img.get("width"),
+                "height": img.get("height"),
+                "srcset": img.get("srcset"),
+                "sizes": img.get("sizes"),
+                "fetchpriority": img.get("fetchpriority"),
             })
 
         # JSON-LD
@@ -316,6 +339,26 @@ def fetch_llms_txt(url, timeout=15):
     return result
 
 
+def fetch_rsl(url, timeout=15):
+    """Check for RSL 1.0 at /.well-known/rsl.json."""
+    parsed = urlparse(url)
+    rsl_url = f"{parsed.scheme}://{parsed.netloc}/.well-known/rsl.json"
+
+    result = {"url": rsl_url, "exists": False, "content": ""}
+
+    try:
+        resp = requests.get(rsl_url, headers=HEADERS, timeout=timeout)
+        if resp.status_code == 200:
+            content_type = resp.headers.get("content-type", "")
+            if "json" in content_type or not content_type.startswith("text/html"):
+                result["exists"] = True
+                result["content"] = resp.text
+    except Exception:
+        pass
+
+    return result
+
+
 def crawl_sitemap(url, max_pages=50, timeout=15):
     """Discover pages from sitemap.xml."""
     parsed = urlparse(url)
@@ -324,7 +367,7 @@ def crawl_sitemap(url, max_pages=50, timeout=15):
         f"{parsed.scheme}://{parsed.netloc}/sitemap_index.xml",
     ]
 
-    pages = set()
+    pages = {}
 
     for sitemap_url in candidates:
         try:
@@ -346,7 +389,10 @@ def crawl_sitemap(url, max_pages=50, timeout=15):
                         for u in child_soup.find_all("url"):
                             loc_tag = u.find("loc")
                             if loc_tag:
-                                pages.add(loc_tag.text.strip())
+                                page_url = loc_tag.text.strip()
+                                lastmod_tag = u.find("lastmod")
+                                lastmod = lastmod_tag.text.strip() if lastmod_tag else None
+                                pages[page_url] = lastmod
                             if len(pages) >= max_pages:
                                 break
                 except Exception:
@@ -358,7 +404,10 @@ def crawl_sitemap(url, max_pages=50, timeout=15):
             for u in soup.find_all("url"):
                 loc = u.find("loc")
                 if loc:
-                    pages.add(loc.text.strip())
+                    page_url = loc.text.strip()
+                    lastmod_tag = u.find("lastmod")
+                    lastmod = lastmod_tag.text.strip() if lastmod_tag else None
+                    pages[page_url] = lastmod
                 if len(pages) >= max_pages:
                     break
 
@@ -368,13 +417,13 @@ def crawl_sitemap(url, max_pages=50, timeout=15):
         except Exception:
             continue
 
-    return list(pages)[:max_pages]
+    return [{"url": u, "lastmod": lm} for u, lm in list(pages.items())[:max_pages]]
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python3 fetch_page.py <url> [mode]")
-        print("Modes: page (default), robots, llms, sitemap, full")
+        print("Modes: page (default), robots, llms, sitemap, rsl, full")
         sys.exit(1)
 
     target = sys.argv[1]
@@ -389,12 +438,16 @@ if __name__ == "__main__":
     elif mode == "sitemap":
         found = crawl_sitemap(target)
         data = {"pages": found, "count": len(found)}
+    elif mode == "rsl":
+        data = fetch_rsl(target)
     elif mode == "full":
+        sitemap_pages = crawl_sitemap(target)
         data = {
             "page": fetch_page(target),
             "robots": fetch_robots(target),
             "llms": fetch_llms_txt(target),
-            "sitemap": crawl_sitemap(target),
+            "rsl": fetch_rsl(target),
+            "sitemap": {"pages": sitemap_pages, "count": len(sitemap_pages)},
         }
     else:
         print(f"Unknown mode: {mode}")

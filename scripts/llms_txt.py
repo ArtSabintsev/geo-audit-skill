@@ -72,7 +72,26 @@ def fetch_llms_data(url, timeout=15):
     return result
 
 
-def analyze_llms_txt(llms_data, page_data=None):
+def fetch_rsl_data(url, timeout=15):
+    """Fetch /.well-known/rsl.json for RSL 1.0 licensing check."""
+    parsed = urlparse(url)
+    base = f"{parsed.scheme}://{parsed.netloc}"
+    rsl_url = f"{base}/.well-known/rsl.json"
+
+    result = {"url": rsl_url, "exists": False, "content": ""}
+
+    try:
+        resp = requests.get(rsl_url, headers=HEADERS, timeout=timeout)
+        if resp.status_code == 200:
+            result["exists"] = True
+            result["content"] = resp.text
+    except Exception:
+        pass
+
+    return result
+
+
+def analyze_llms_txt(llms_data, page_data=None, rsl_data=None):
     """
     Score llms.txt quality and spec compliance.
 
@@ -231,6 +250,39 @@ def analyze_llms_txt(llms_data, page_data=None):
                 ),
             })
 
+    # RSL 1.0 licensing check
+    if rsl_data is not None:
+        if rsl_data.get("exists"):
+            score = min(100, score + 5)
+            findings.append({
+                "id": "llms-rsl-found",
+                "dimension": "llms_txt",
+                "severity": "pass",
+                "title": "RSL 1.0 licensing file found",
+                "description": (
+                    "Your site provides a /.well-known/rsl.json file. "
+                    "RSL 1.0 (Really Simple Licensing) is a machine-readable AI "
+                    "licensing standard backed by Reddit, Yahoo, Medium, Quora, "
+                    "Cloudflare, Akamai, and Creative Commons. It tells AI systems "
+                    "how they are permitted to use your content."
+                ),
+                "confidence": "confirmed",
+            })
+        else:
+            findings.append({
+                "id": "llms-rsl-missing",
+                "dimension": "llms_txt",
+                "severity": "low",
+                "title": "No RSL 1.0 licensing file",
+                "description": (
+                    "Consider adding a /.well-known/rsl.json file. RSL 1.0 "
+                    "(Really Simple Licensing) is a machine-readable AI licensing "
+                    "standard backed by Reddit, Yahoo, Medium, and others. It lets "
+                    "you specify how AI systems can use your content."
+                ),
+                "confidence": "confirmed",
+            })
+
     # Add confidence labels
     for f in findings:
         f["confidence"] = "confirmed"
@@ -277,8 +329,9 @@ if __name__ == "__main__":
             else:
                 llms_data = raw
                 page_data = None
+            rsl_data = raw.get("rsl")
             print(json.dumps(
-                analyze_llms_txt(llms_data, page_data), indent=2, default=str
+                analyze_llms_txt(llms_data, page_data, rsl_data=rsl_data), indent=2, default=str
             ))
             sys.exit(0)
         except (json.JSONDecodeError, KeyError):
@@ -290,4 +343,5 @@ if __name__ == "__main__":
         sys.exit(1)
 
     llms_data = fetch_llms_data(sys.argv[1])
-    print(json.dumps(analyze_llms_txt(llms_data), indent=2, default=str))
+    rsl_data = fetch_rsl_data(sys.argv[1])
+    print(json.dumps(analyze_llms_txt(llms_data, rsl_data=rsl_data), indent=2, default=str))

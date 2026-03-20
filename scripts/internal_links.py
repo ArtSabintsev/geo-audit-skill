@@ -15,6 +15,7 @@ Accepts a URL as argument or reads fetch_page.py JSON from stdin.
 import sys
 import json
 import re
+from datetime import datetime, timezone
 from urllib.parse import urlparse, urljoin
 from collections import Counter
 
@@ -321,10 +322,95 @@ def analyze_internal_links(page_data, sitemap_pages=None):
     else:
         hub_score = 10  # homepage gets neutral score
 
-    # --- 5. Sitemap coverage ---
+    # --- 5. Sitemap validation (informational findings) ---
+    sitemap_urls = []
+    if sitemap_pages:
+        # Determine format: list of dicts (new) or list of strings (old)
+        is_dict_format = (
+            len(sitemap_pages) > 0
+            and isinstance(sitemap_pages[0], dict)
+        )
+
+        if is_dict_format:
+            sitemap_urls = [
+                entry.get("url", "") for entry in sitemap_pages if entry.get("url")
+            ]
+        else:
+            sitemap_urls = list(sitemap_pages)
+
+        # 5a. URL count check (applies to both formats)
+        if len(sitemap_urls) > 50000:
+            findings.append({
+                "id": "links-sitemap-too-large",
+                "dimension": "internal_links",
+                "severity": "medium",
+                "confidence": "confirmed",
+                "title": f"Sitemap contains {len(sitemap_urls):,} URLs — exceeds 50,000 limit",
+                "description": (
+                    f"The sitemap has {len(sitemap_urls):,} URLs, which exceeds the "
+                    "50,000-URL limit per sitemap file specified by the sitemaps protocol. "
+                    "Split the sitemap into multiple files using a sitemap index."
+                ),
+            })
+
+        # 5b-5c. lastmod checks (only for dict format)
+        if is_dict_format:
+            lastmod_values = [entry.get("lastmod") for entry in sitemap_pages]
+            missing_lastmod = sum(
+                1 for v in lastmod_values if not v or (isinstance(v, str) and not v.strip())
+            )
+            total_entries = len(sitemap_pages)
+
+            # 5b. Missing lastmod
+            if total_entries > 0 and (missing_lastmod / total_entries) > 0.5:
+                findings.append({
+                    "id": "links-sitemap-no-lastmod",
+                    "dimension": "internal_links",
+                    "severity": "low",
+                    "confidence": "confirmed",
+                    "title": f"{missing_lastmod}/{total_entries} sitemap URLs lack lastmod dates",
+                    "description": (
+                        "Most sitemap URLs lack <lastmod> dates. Adding accurate "
+                        "lastmod dates helps AI crawlers prioritize fresh content."
+                    ),
+                })
+
+            # 5c. Stale lastmod (oldest > 2 years)
+            parsed_dates = []
+            for v in lastmod_values:
+                if not v or not isinstance(v, str) or not v.strip():
+                    continue
+                for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+                    try:
+                        dt = datetime.strptime(v.strip()[:20], fmt)
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=timezone.utc)
+                        parsed_dates.append(dt)
+                        break
+                    except ValueError:
+                        continue
+
+            if parsed_dates:
+                now = datetime.now(timezone.utc)
+                oldest = min(parsed_dates)
+                age_days = (now - oldest).days
+                if age_days > 730:  # ~2 years
+                    findings.append({
+                        "id": "links-sitemap-stale-entries",
+                        "dimension": "internal_links",
+                        "severity": "low",
+                        "confidence": "confirmed",
+                        "title": f"Sitemap has entries with lastmod dates over 2 years old",
+                        "description": (
+                            "Sitemap contains URLs with lastmod dates older than "
+                            "2 years. Review whether these pages are still relevant."
+                        ),
+                    })
+
+    # --- 6. Sitemap coverage ---
     sitemap_score = 0
-    if sitemap_pages and len(sitemap_pages) > 1:
-        sitemap_set = set(p.rstrip("/").lower() for p in sitemap_pages)
+    if sitemap_urls and len(sitemap_urls) > 1:
+        sitemap_set = set(p.rstrip("/").lower() for p in sitemap_urls)
         linked_set = set(u.rstrip("/").lower() for u in unique_internal_urls)
         covered = linked_set & sitemap_set
         coverage = len(covered) / len(sitemap_set) if sitemap_set else 0
@@ -395,8 +481,12 @@ if __name__ == "__main__":
             raw = json.load(sys.stdin)
             if "page" in raw:
                 page_data = raw["page"]
-                if "sitemap" in raw and isinstance(raw["sitemap"], list):
-                    sitemap_pages = raw["sitemap"]
+                if "sitemap" in raw:
+                    sm = raw["sitemap"]
+                    if isinstance(sm, dict) and "pages" in sm:
+                        sitemap_pages = sm["pages"]
+                    elif isinstance(sm, list):
+                        sitemap_pages = sm
             else:
                 page_data = raw
             print(json.dumps(

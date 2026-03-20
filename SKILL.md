@@ -34,7 +34,7 @@ allowed-tools: Read, Grep, Glob, Bash, WebFetch, Write, Edit, Agent
    ```bash
    python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full
    ```
-   This returns JSON with page data (including language, viewport, OG tags, meta robots, X-Robots-Tag, response time, detected platform), robots.txt, llms.txt status, and sitemap pages.
+   This returns JSON with page data (including language, viewport, OG tags, Twitter Cards, meta robots, X-Robots-Tag, hreflang links, response time, detected platform), robots.txt, llms.txt status, RSL 1.0 licensing status, and sitemap pages (with lastmod data).
 
    The script auto-detects 15 platforms: WordPress, WordPress.com, Squarespace, Wix, Shopify, Webflow, Ghost, Framer, HubSpot, Carrd, Weebly, Drupal, Next.js, Vercel, Netlify. The `detected_platform` field will be `{"name": "Squarespace", "slug": "squarespace"}` or `null`.
 
@@ -59,9 +59,9 @@ allowed-tools: Read, Grep, Glob, Bash, WebFetch, Write, Edit, Agent
    - Product/service pages
    - Pricing page (if SaaS)
 
-### Phase 2: Parallel Analysis (11 Subagents)
+### Phase 2: Parallel Analysis (12 Subagents)
 
-Launch these 11 analyses simultaneously using the Agent tool:
+Launch these 12 analyses simultaneously using the Agent tool:
 
 #### Agent 1: AI Citability + Content Quality
 - Run citability scorer on up to 10 key pages:
@@ -78,6 +78,8 @@ Launch these 11 analyses simultaneously using the Agent tool:
 - Semantic topic coverage: heading diversity, subtopic breadth, repetitive heading detection
 - LLM chunk-size scoring: checks if passages match ~500-token retrieval window sizes (optimal 225-415 words), flags oversized blocks (>600 words)
 - Keyword density check: extracts primary keyword from title/H1, flags stuffing (>3%) or underuse (<0.5%)
+- Flesch readability scoring: pure-Python Flesch Reading Ease calculator. Content in the 60-75 range receives up to 31% more AI citations. Flags very difficult (<30) and moderate (30-50) readability.
+- Multi-modal content detection: checks for video embeds, interactive elements (canvas, SVG, calculators), audio, data visualizations. Multi-modal content sees up to 156% higher AI selection rates.
 
 #### Agent 2: AI Crawler Access + llms.txt Quality
 - Parse robots.txt results from Phase 1 fetch data
@@ -87,6 +89,7 @@ Launch these 11 analyses simultaneously using the Agent tool:
   python3 ${CLAUDE_SKILL_DIR}/scripts/llms_txt.py <url>
   ```
 - Scores existence, content length, markdown structure (# title, > description, ## sections), key pages section, about section, markdown link format, llms-full.txt bonus
+- Checks for RSL 1.0 (Really Simple Licensing) at /.well-known/rsl.json — a machine-readable AI licensing standard backed by Reddit, Yahoo, Medium, Quora, Cloudflare, Akamai, and Creative Commons
 - If llms.txt is missing, draft one based on site structure
 
 #### Agent 3: Schema / Structured Data
@@ -108,7 +111,7 @@ Launch these 11 analyses simultaneously using the Agent tool:
   ```bash
   python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full | python3 ${CLAUDE_SKILL_DIR}/scripts/technical_seo.py
   ```
-- 13 weighted checks: HTTPS, redirect chain, canonical tag, H1 count, meta description length, word count (300+), security headers, SSR detection, viewport meta, language attribute, Open Graph tags, response time (<3s), image alt text coverage (80%+)
+- 18 weighted checks: HTTPS, redirect chain, canonical tag, H1 count, meta description length, word count (300+), security headers, SSR detection, viewport meta, language attribute, Open Graph tags, response time (<3s), image alt text coverage (80%+), Twitter Cards, URL structure (length, clean characters), image optimization (width/height for CLS, lazy loading, srcset), hreflang validation, structured data in JS detection
 - Optionally check Core Web Vitals via PageSpeed Insights:
   ```
   https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=<url>&strategy=mobile
@@ -206,6 +209,20 @@ Launch these 11 analyses simultaneously using the Agent tool:
 - Link diversity: ratio of unique destinations to total links
 - Hub pattern detection: checks if page links to related content in the same section (hub-and-spoke topology)
 - Sitemap coverage: how many sitemap pages are reachable via internal links from this page
+- Sitemap validation: URL count limits (50k max), lastmod presence and accuracy, stale sitemap entries (>2 years)
+
+#### Agent 12: Hreflang / International SEO
+- Run the hreflang validator:
+  ```bash
+  python3 ${CLAUDE_SKILL_DIR}/scripts/hreflang.py <url>
+  ```
+  Or pipe Phase 1 data:
+  ```bash
+  python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full | python3 ${CLAUDE_SKILL_DIR}/scripts/hreflang.py
+  ```
+- If no hreflang tags: neutral pass (not every site needs them)
+- If hreflang tags exist, validates 5 checks: self-referencing tag, x-default presence, valid ISO 639-1 language codes, consistent protocol (http/https), canonical URL alignment
+- Weighted scoring like technical_seo.py
 
 ### Phase 3: Report
 
@@ -223,7 +240,7 @@ Present findings grouped by category. For each category:
 Categories to report:
 1. AI Citability
 2. AI Crawler Access
-3. llms.txt Status
+3. llms.txt & RSL Status
 4. Structured Data / Schema
 5. Technical SEO
 6. Content Quality & E-E-A-T
@@ -232,6 +249,7 @@ Categories to report:
 9. Search Intent
 10. Content Freshness
 11. Internal Link Structure
+12. Hreflang / International SEO
 
 ### Phase 4: Autofix
 
@@ -342,13 +360,13 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> [mode]
 ```
 Modes: `page`, `robots`, `llms`, `sitemap`, `full`
 
-Returns JSON to stdout. Page mode includes: language attribute, viewport meta, Open Graph tags, meta robots, X-Robots-Tag header, response time (ms), and checks 32 AI crawlers.
+Returns JSON to stdout. Page mode includes: language attribute, viewport meta, Open Graph tags, Twitter Cards, hreflang links, meta robots, X-Robots-Tag header, response time (ms), enhanced image data (width, height, srcset, sizes, fetchpriority), and checks 32 AI crawlers. Full mode also includes RSL 1.0 status and enhanced sitemap data with lastmod.
 
 ### citability.py
 ```
 python3 ${CLAUDE_SKILL_DIR}/scripts/citability.py <url>
 ```
-Returns JSON with per-passage citability scores, page-level summary, and structural findings (data table detection, heading structure validation, FAQ/snippet detection, conversational language, entity density, semantic topic coverage, LLM chunk-size scoring, keyword density).
+Returns JSON with per-passage citability scores, page-level summary, and structural findings (data table detection, heading structure validation, FAQ/snippet detection, conversational language, entity density, semantic topic coverage, LLM chunk-size scoring, keyword density, Flesch readability scoring, multi-modal content detection).
 
 ### schema_check.py
 ```
@@ -384,7 +402,7 @@ Or pipe from fetch_page.py:
 ```
 python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full | python3 ${CLAUDE_SKILL_DIR}/scripts/technical_seo.py
 ```
-Returns JSON with 13 weighted technical checks, per-check pass/fail, overall score, grade, and findings.
+Returns JSON with 18 weighted technical checks, per-check pass/fail, overall score, grade, and findings.
 
 ### llms_txt.py
 ```
@@ -435,7 +453,17 @@ Or pipe from fetch_page.py:
 ```
 python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full | python3 ${CLAUDE_SKILL_DIR}/scripts/internal_links.py
 ```
-Returns JSON with link density, anchor text quality, link diversity, hub pattern detection, sitemap coverage, score, grade, and findings.
+Returns JSON with link density, anchor text quality, link diversity, hub pattern detection, sitemap coverage, sitemap validation (URL count, lastmod, stale entries), score, grade, and findings.
+
+### hreflang.py
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/hreflang.py <url>
+```
+Or pipe from fetch_page.py:
+```
+python3 ${CLAUDE_SKILL_DIR}/scripts/fetch_page.py <url> full | python3 ${CLAUDE_SKILL_DIR}/scripts/hreflang.py
+```
+Returns JSON with hreflang tag count, languages found, validation results (self-referencing, x-default, language codes, protocol consistency, canonical alignment), score, grade, and findings. Returns neutral score (100) if no hreflang tags are present.
 
 ---
 

@@ -29,6 +29,31 @@ HEADERS = {
 }
 
 
+def count_syllables(word):
+    """Estimate syllable count for English words."""
+    word = word.lower().strip(".,!?;:'\"")
+    if not word:
+        return 0
+    if len(word) <= 3:
+        return 1
+    # Count vowel groups
+    count = 0
+    vowels = "aeiouy"
+    prev_vowel = False
+    for char in word:
+        is_vowel = char in vowels
+        if is_vowel and not prev_vowel:
+            count += 1
+        prev_vowel = is_vowel
+    # Adjust for silent e
+    if word.endswith("e") and count > 1:
+        count -= 1
+    # Adjust for -le endings
+    if word.endswith("le") and len(word) > 2 and word[-3] not in vowels:
+        count += 1
+    return max(count, 1)
+
+
 def score_passage(text, heading=None):
     """Score a single passage for AI citability (0-100)."""
     words = text.split()
@@ -625,6 +650,146 @@ def analyze_page(url):
                     ),
                 })
 
+    # --- Flesch Readability Scoring ---
+    if all_word_count >= 100:
+        flesch_sentences = [s.strip() for s in re.split(r"[.!?]+", all_text) if s.strip()]
+        flesch_sentence_count = len(flesch_sentences) if flesch_sentences else 1
+        flesch_word_count = all_word_count
+        flesch_syllable_count = sum(count_syllables(w) for w in all_words)
+
+        flesch_score = (
+            206.835
+            - 1.015 * (flesch_word_count / flesch_sentence_count)
+            - 84.6 * (flesch_syllable_count / flesch_word_count)
+        )
+        flesch_score = round(flesch_score, 1)
+
+        if flesch_score < 30:
+            page_findings.append({
+                "id": "citability-low-readability",
+                "severity": "medium",
+                "title": f"Content is very difficult to read (Flesch: {flesch_score})",
+                "description": (
+                    "The Flesch Reading Ease score indicates very difficult content. "
+                    "Content in the Flesch 60-75 range receives up to 31% more AI "
+                    "citations according to GEO research."
+                ),
+                "confidence": "likely",
+            })
+        elif 30 <= flesch_score < 50:
+            page_findings.append({
+                "id": "citability-moderate-readability",
+                "severity": "low",
+                "title": f"Content readability could be improved (Flesch: {flesch_score})",
+                "description": (
+                    "The Flesch Reading Ease score indicates difficult content. "
+                    "Content in the Flesch 60-75 range receives up to 31% more AI "
+                    "citations according to GEO research."
+                ),
+                "confidence": "likely",
+            })
+        elif 60 <= flesch_score <= 75:
+            page_findings.append({
+                "id": "citability-good-readability",
+                "severity": "pass",
+                "title": f"Good readability for AI citation (Flesch: {flesch_score})",
+                "description": (
+                    "Content in the Flesch 60-75 range receives up to 31% more AI "
+                    "citations according to GEO research."
+                ),
+                "confidence": "likely",
+            })
+        elif flesch_score > 75:
+            page_findings.append({
+                "id": "citability-easy-readability",
+                "severity": "pass",
+                "title": f"Content is very easy to read (Flesch: {flesch_score})",
+                "description": (
+                    "Content is highly readable. Content in the Flesch 60-75 range "
+                    "receives up to 31% more AI citations according to GEO research."
+                ),
+                "confidence": "likely",
+            })
+
+    # --- Multi-Modal Content Detection ---
+    media_types_found = []
+
+    # Video elements
+    video_tags = raw_soup.find_all("video")
+    video_iframes = [
+        iframe for iframe in raw_soup.find_all("iframe")
+        if iframe.get("src") and re.search(
+            r"youtube|youtu\.be|vimeo|wistia", iframe.get("src", ""), re.I
+        )
+    ]
+    if video_tags or video_iframes:
+        media_types_found.append("video")
+
+    # Interactive elements
+    canvas_tags = raw_soup.find_all("canvas")
+    calculator_tags = raw_soup.find_all("calculator")
+    app_roles = raw_soup.find_all(attrs={"role": "application"})
+    # SVG: non-icon (check if width > 100 or viewBox suggests large size)
+    large_svgs = []
+    for svg in raw_soup.find_all("svg"):
+        width = svg.get("width", "")
+        viewbox = svg.get("viewBox", svg.get("viewbox", ""))
+        try:
+            if width and int(re.sub(r"[^0-9]", "", str(width))) > 100:
+                large_svgs.append(svg)
+                continue
+        except (ValueError, TypeError):
+            pass
+        if viewbox:
+            parts = viewbox.split()
+            if len(parts) >= 4:
+                try:
+                    vb_width = float(parts[2])
+                    if vb_width > 100:
+                        large_svgs.append(svg)
+                except (ValueError, TypeError):
+                    pass
+    if canvas_tags or large_svgs or calculator_tags or app_roles:
+        media_types_found.append("interactive elements")
+
+    # Embedded media
+    audio_tags = raw_soup.find_all("audio")
+    embed_tags = raw_soup.find_all("embed")
+    object_tags = raw_soup.find_all("object")
+    if audio_tags or embed_tags or object_tags:
+        media_types_found.append("embedded media")
+
+    # Data visualizations: elements with chart/graph/diagram classes
+    viz_elements = raw_soup.find_all(
+        attrs={"class": re.compile(r"chart|graph|diagram", re.I)}
+    )
+    if viz_elements:
+        media_types_found.append("data visualizations")
+
+    if not media_types_found and total_word_count > 500:
+        page_findings.append({
+            "id": "citability-no-multimodal",
+            "severity": "low",
+            "title": "No multi-modal content detected",
+            "description": (
+                "No video, interactive elements, embedded media, or data visualizations "
+                "were found on this page. Multi-modal content (video, infographics, "
+                "interactive tools) sees up to 156% higher AI selection rates."
+            ),
+            "confidence": "hypothesis",
+        })
+    elif media_types_found:
+        page_findings.append({
+            "id": "citability-multimodal-found",
+            "severity": "pass",
+            "title": f"Multi-modal content detected: {', '.join(media_types_found)}",
+            "description": (
+                "Page includes multi-modal content that can increase AI engagement "
+                "and citation rates."
+            ),
+            "confidence": "hypothesis",
+        })
+
     # --- Semantic topic coverage ---
     headings = [b["heading"] for b in blocks if b["heading"] != "Introduction"]
     unique_headings = set(headings)
@@ -686,10 +851,13 @@ def analyze_page(url):
         "citability-low-entity-density", "citability-low-topic-coverage",
         "citability-repetitive-headings", "citability-poor-chunk-size",
         "citability-oversized-chunks", "citability-keyword-stuffing",
-        "citability-low-keyword-density",
+        "citability-low-keyword-density", "citability-no-multimodal",
+        "citability-multimodal-found",
     }
     for f in page_findings:
-        if f["id"] in HYPOTHESIS_IDS:
+        if "confidence" in f:
+            pass  # already set (e.g. readability and multi-modal findings)
+        elif f["id"] in HYPOTHESIS_IDS:
             f["confidence"] = "hypothesis"
         else:
             f["confidence"] = "confirmed"
