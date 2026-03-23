@@ -47,6 +47,25 @@ SECURITY_HEADERS = [
     "Referrer-Policy", "Permissions-Policy",
 ]
 
+# Maximum characters for text_content to limit exposure to untrusted content
+MAX_TEXT_CONTENT_LENGTH = 50000
+
+
+def sanitize_text_content(text):
+    """Light-touch sanitization of extracted text content.
+
+    Strips HTML comments that survived parsing, collapses excessive whitespace,
+    and truncates to a safe length. Preserves legitimate page content.
+    """
+    # Remove any HTML comments that survived text extraction
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+    # Collapse runs of whitespace into single spaces
+    text = re.sub(r"\s{3,}", "  ", text)
+    # Truncate to safe length
+    if len(text) > MAX_TEXT_CONTENT_LENGTH:
+        text = text[:MAX_TEXT_CONTENT_LENGTH] + " [truncated]"
+    return text.strip()
+
 
 def fetch_page(url, timeout=30):
     """Fetch a page and return structured data."""
@@ -145,10 +164,11 @@ def fetch_page(url, timeout=30):
                 if level == 1:
                     result["h1_tags"].append(text)
 
-        # Text content (strip boilerplate)
+        # Text content (strip boilerplate, then sanitize)
         for el in soup.find_all(["script", "style", "nav", "footer", "header"]):
             el.decompose()
         text = soup.get_text(separator=" ", strip=True)
+        text = sanitize_text_content(text)
         result["text_content"] = text
         result["word_count"] = len(text.split())
 

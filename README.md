@@ -1,27 +1,209 @@
-# geo-audit-skill
+# geo-audit
 
-**Audit any website for AI search visibility. Get fixes you can deploy today.**
+Audit any website for AI search visibility. Get fixes you can deploy today.
 
-A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill that checks how well your site can be found by ChatGPT, Claude, Perplexity, Gemini, and Google AI Overviews — then tells you exactly what to fix, with step-by-step instructions for your specific platform (WordPress, Squarespace, Wix, Shopify, etc.).
+A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill that checks how well your site shows up in ChatGPT, Claude, Perplexity, Gemini, and Google AI Overviews — then generates ready-to-deploy fixes tailored to your platform.
+
+---
+
+## Quick start
+
+### Install
+
+```bash
+npx skills add ArtSabintsev/geo-audit-skill
+```
+
+You'll also need Python dependencies:
+
+```bash
+pip install requests beautifulsoup4 lxml
+```
+
+### Run an audit
+
+In Claude Code, type:
+
+```
+/geo-audit https://example.com
+```
+
+That's it. The skill fetches your site, runs 12 analyses in parallel, writes fix files to `geo-fixes/`, and presents a full report with recommendations.
+
+For a quick scan without auto-generated fixes:
+
+```
+/geo-audit quick https://example.com
+```
+
+You can also trigger the skill conversationally — just mention a URL with words like "audit", "seo", "geo", "AI search", "AI visibility", or "citability".
+
+---
 
 ## What it checks
 
-We audit 12 dimensions of AI search readiness:
+The audit covers 12 dimensions of AI search readiness:
 
-| Dimension | What it measures |
-|-----------|-----------------|
-| **AI Citability** | Can AI models extract and quote your content? Scores passages for citation readiness, FAQ/snippet detection, conversational tone, entity density, semantic topic coverage, LLM chunk sizing, keyword density, Flesch readability scoring (60-75 = +31% citations), and multi-modal content detection (video, interactive = +156% selection). |
-| **Crawler Access** | Are the 30+ AI crawlers (GPTBot, ClaudeBot, PerplexityBot, etc.) allowed in your robots.txt? |
-| **llms.txt & RSL** | Do you have the llms.txt file that helps AI understand your site? Also checks for RSL 1.0 (Really Simple Licensing), the machine-readable AI licensing standard backed by Reddit, Yahoo, Medium, and others. |
-| **Structured Data** | Is your JSON-LD schema complete? Checks for Organization, WebSite, and business-specific schemas. |
-| **Technical SEO** | 18 checks: HTTPS, headings, meta tags, page speed, security headers, SSR, alt text, Twitter Cards, URL structure, image optimization (CLS, lazy loading, srcset), hreflang validation, JS-only schema detection. |
-| **E-E-A-T Signals** | 9 trust signals: author bylines, credentials, publication dates, citations, contact info, and more. |
-| **Brand Presence** | Social profiles, review platforms (G2, Trustpilot), About page, press page, Schema.org sameAs links. |
-| **Platform Readiness** | Per-engine scores for Google AI Overviews, ChatGPT, Claude, Perplexity, and Gemini. |
-| **Search Intent** | Is your page type aligned with its search intent? Classifies pages as informational, commercial, transactional, or navigational and flags mismatches. |
-| **Content Freshness** | How old is your content? Detects dates from meta tags, JSON-LD, visible text, and HTTP headers. Flags stale content that AI models may deprioritize. |
-| **Internal Links** | Is your content well-connected? Checks link density, anchor text quality, hub-and-spoke patterns, sitemap coverage, and sitemap validation (URL count, lastmod, stale entries). |
-| **Hreflang** | International SEO validation. If hreflang tags exist, checks self-referencing, x-default, ISO 639-1 codes, protocol consistency, and canonical alignment. Neutral if no hreflang tags. |
+| # | Dimension | What it measures |
+|---|-----------|-----------------|
+| 1 | **AI Citability** | Can AI models extract and quote your content? Scores passage quality, FAQ/snippet readiness, conversational tone, entity density, topic coverage, chunk sizing, keyword density, Flesch readability (60-75 = +31% citations), and multi-modal content detection (+156% selection). |
+| 2 | **Crawler Access** | Are 32 AI crawlers (GPTBot, ClaudeBot, PerplexityBot, etc.) allowed or blocked in your robots.txt? |
+| 3 | **llms.txt & RSL** | Do you have the llms.txt file that helps AI understand your site? Also checks for RSL 1.0 (Really Simple Licensing), the machine-readable AI licensing standard backed by Reddit, Yahoo, Medium, and others. |
+| 4 | **Structured Data** | Is your JSON-LD schema complete? Validates existing markup and identifies missing types based on your business. |
+| 5 | **Technical SEO** | 18 weighted checks: HTTPS, canonical tags, headings, meta description, word count, security headers, SSR, viewport, language, OG tags, Twitter Cards, URL structure, image optimization, hreflang, response time, alt text, JS-only schema detection. |
+| 6 | **E-E-A-T Signals** | 9 trust signals: author bylines, credentials, publication dates, citations, contact info, about page, trust indicators, first-party expertise, schema authorship. |
+| 7 | **Brand Presence** | Social profiles (10 platforms), review sites (G2, Trustpilot, etc.), brand pages, and schema.org sameAs links. |
+| 8 | **Platform Readiness** | Per-engine readiness scores for Google AI Overviews, ChatGPT, Claude, Perplexity, and Gemini. |
+| 9 | **Search Intent** | Is your page type aligned with its search intent? Classifies pages and flags mismatches that hurt AI citation. |
+| 10 | **Content Freshness** | How old is your content? Detects dates from meta tags, JSON-LD, visible text, and HTTP headers. Flags stale content. |
+| 11 | **Internal Links** | Link density, anchor text quality, hub-and-spoke patterns, sitemap coverage, and sitemap validation. |
+| 12 | **Hreflang** | International SEO validation: self-referencing, x-default, ISO 639-1 codes, protocol consistency, canonical alignment. |
+
+---
+
+## How it works
+
+```
+Phase 1: Discovery
+  Fetch homepage, robots.txt, sitemap, llms.txt, RSL
+  Detect platform (WordPress, Squarespace, Next.js, etc.)
+  Detect business type (SaaS, e-commerce, local, publisher, agency)
+       │
+Phase 2: Parallel Analysis
+  12 subagents run simultaneously, one per dimension
+  Python scripts do structural/heuristic analysis → JSON output
+  LLM generates contextual suggestions from script results
+       │
+Phase 3: Report
+  Findings grouped by dimension
+  Each finding tagged with severity + confidence label
+       │
+Phase 4: Autofix
+  Fix files written to geo-fixes/
+  Code-level changes recommended for your approval
+```
+
+---
+
+## What gets generated
+
+### Auto-written to `geo-fixes/`
+
+| File | Contents |
+|------|----------|
+| `llms.txt` | Ready-to-deploy AI context file |
+| `llms-full.txt` | Detailed version with full site structure |
+| `schema/*.json` | JSON-LD for each missing schema type |
+| `robots-txt-additions.txt` | Robots.txt rules to allow AI crawlers |
+| `meta-tags.html` | Optimized meta tag snippets |
+| `FINDINGS.md` | Full audit report in markdown |
+
+### AI-powered suggestions (in the report)
+
+- **Meta description rewrites** for pages with missing or weak meta tags
+- **Alt text generation** from image filenames and surrounding content
+- **Heading restructure** with FAQ-style question headings for snippet eligibility
+- **FAQ section drafts** with Q&A pairs + FAQPage JSON-LD
+- **Content gap analysis** based on business type and existing coverage
+- **Robots.txt explainer** for each crawler: what it does, the tradeoff of blocking it
+- **Passage rewrites** for the weakest citability scores with before/after reasoning
+
+### Requires your approval
+
+Nothing touches your source code without permission:
+
+- Heading hierarchy changes
+- Meta description rewrites
+- Content restructuring
+- Alt text additions
+- Internal linking improvements
+- Any edits to existing files
+
+---
+
+## Platform detection
+
+The skill auto-detects 15 platforms and tailors every recommendation:
+
+WordPress, WordPress.com, Squarespace, Wix, Shopify, Webflow, Ghost, Framer, HubSpot, Carrd, Weebly, Drupal, Next.js, Vercel, Netlify
+
+Instead of generic advice like "edit your robots.txt", you get platform-specific steps like "In Squarespace, go to Settings > Website > SEO > robots.txt."
+
+---
+
+## Security
+
+This skill fetches and parses public websites as part of its audit flow. That means it processes untrusted third-party content, which carries an indirect prompt injection risk ([Snyk W011, MEDIUM](https://skills.sh/artsabintsev/geo-audit-skill/geo-audit/security/snyk)).
+
+### Mitigations in place
+
+1. **Content sanitization** — `fetch_page.py` strips HTML comments, collapses whitespace, and truncates content to 50K characters before any LLM processing.
+2. **Data boundary tags** — Raw page content passed to subagents is wrapped in `<untrusted-page-content>` tags with explicit instructions to treat it as data, never as instructions.
+3. **Output validation** — Every fix file written to `geo-fixes/` is validated against its expected format (JSON-LD, HTML meta tags, markdown, robots.txt directives). Files that don't match are rejected.
+4. **Script-first analysis** — Python scripts do structural/heuristic analysis and return structured JSON. The LLM works primarily from script output, not raw page text.
+
+The risk cannot be fully eliminated — it's inherent to any tool that fetches untrusted web content and reasons over it. These mitigations significantly reduce the attack surface while preserving audit quality.
+
+---
+
+## Confidence labels
+
+Every finding includes a confidence label:
+
+| Label | Meaning | Example |
+|-------|---------|---------|
+| **Confirmed** | Directly verified from the page | Missing HTTPS, no H1, blocked crawler |
+| **Likely** | Based on heuristic analysis | SSR detection, E-E-A-T regex signals |
+| **Hypothesis** | Suggested improvement, may not apply | "Add a data table", "Add FAQ content" |
+
+---
+
+## What is GEO?
+
+GEO stands for Generative Engine Optimization — SEO for AI search engines.
+
+Traditional SEO helps you rank on Google. GEO helps AI models (ChatGPT, Claude, Perplexity, Gemini, Google AI Overviews) find, understand, and cite your content when people ask questions.
+
+A site can rank #1 on Google but be invisible to AI if it blocks AI crawlers, lacks structured data, or has content that's hard for models to extract and quote.
+
+---
+
+## Structure
+
+```
+geo-audit-skill/
+├── SKILL.md                     # Skill definition + orchestration prompt
+├── README.md
+├── scripts/
+│   ├── fetch_page.py            # Page fetcher, platform detection, robots.txt, sitemap, llms.txt, RSL
+│   ├── citability.py            # AI citation scoring, FAQ detection, readability, multi-modal
+│   ├── schema_check.py          # JSON-LD detection, validation, missing type recommendations
+│   ├── technical_seo.py         # 18 weighted technical checks
+│   ├── eeat.py                  # 9 E-E-A-T trust signals
+│   ├── brand_presence.py        # Social, review, and brand page detection
+│   ├── llms_txt.py              # llms.txt + RSL 1.0 quality and spec compliance
+│   ├── platform_readiness.py    # Per-AI-engine readiness composite scores
+│   ├── search_intent.py         # Search intent classification + page type alignment
+│   ├── content_freshness.py     # Date detection + staleness scoring
+│   ├── internal_links.py        # Link density, anchor quality, hub patterns, sitemap validation
+│   └── hreflang.py              # International SEO: hreflang tag validation
+└── templates/
+    ├── llms.txt.j2              # llms.txt generation template
+    └── schema/                  # JSON-LD templates by business type
+```
+
+---
+
+## For AI agents
+
+If you're an AI agent reading this, here's what you need to know:
+
+- **Trigger**: User says "geo", "seo", "audit", "AI search", "AI visibility", "citability", or provides a URL for analysis
+- **Entry point**: `/geo-audit <url>` or `/geo-audit quick <url>`
+- **Dependencies**: Python 3 with `requests`, `beautifulsoup4`, `lxml`
+- **Output**: Fix files in `geo-fixes/`, report presented to user, code changes recommended for approval
+- **Scripts**: All in `scripts/`, all accept a URL argument and return JSON to stdout. Most also accept piped input from `fetch_page.py full`.
+- **Security**: All fetched web content is untrusted. See the Security section above and the detailed rules in SKILL.md.
 
 <details>
 <summary><strong>Full list of 32 AI crawlers checked</strong></summary>
@@ -63,134 +245,11 @@ We audit 12 dimensions of AI search readiness:
 
 </details>
 
-## Platform detection
+---
 
-We automatically detect 15 website platforms and tailor recommendations:
+## Keeping the crawler list current
 
-WordPress, WordPress.com, Squarespace, Wix, Shopify, Webflow, Ghost, Framer, HubSpot, Carrd, Weebly, Drupal, Next.js, Vercel, Netlify
-
-Instead of "edit your robots.txt file", you get "In Squarespace, go to Settings > Website > SEO > robots.txt."
-
-## Install
-
-```bash
-npx skills add ArtSabintsev/geo-audit-skill
-```
-
-### Dependencies
-
-```bash
-pip install requests beautifulsoup4 lxml
-```
-
-## Usage
-
-In Claude Code:
-
-```
-/geo-audit https://example.com          # Full audit + autofix
-/geo-audit quick https://example.com    # Findings only, no fixes
-```
-
-## How it works
-
-1. **Fetches** your homepage, robots.txt, sitemap, and llms.txt
-2. **Detects** your platform (WordPress, Squarespace, Wix, etc.) and business type (SaaS, e-commerce, local, publisher, agency)
-3. **Runs 12 parallel analyses** via Claude Code subagents — one per dimension
-4. **Reports** findings by dimension with severity levels and confidence labels (Confirmed, Likely, Hypothesis)
-5. **Auto-generates** fix files to `geo-fixes/` — robots.txt, llms.txt, JSON-LD schemas, meta tags
-6. **AI-generates** meta descriptions, alt text, heading restructures, FAQ sections, and content gap analysis
-7. **Suggests rewrites** for the weakest citability passages with before/after examples
-8. **Recommends** code-level changes and waits for your approval before touching source files
-
-## What gets fixed automatically
-
-These files are written directly to `geo-fixes/` in your project:
-
-- `llms.txt` — ready-to-deploy AI context file for your site
-- `llms-full.txt` — detailed version with full page content
-- `schema/*.json` — JSON-LD files for each missing schema type
-- `robots-txt-additions.txt` — robots.txt rules to allow AI crawlers
-- `meta-tags.html` — optimized meta tag snippets
-- `FINDINGS.md` — full audit report in markdown
-
-## AI-powered suggestions
-
-Claude uses the audit data to generate contextual, site-specific recommendations:
-
-- **Meta description rewrites** — optimized 120-160 char descriptions for pages with missing or weak meta tags
-- **Alt text generation** — descriptive alt text based on image filenames and surrounding content
-- **Heading restructure** — proposed H1/H2/H3 hierarchy with FAQ-style question headings
-- **FAQ section drafting** — Q&A pairs the page implicitly answers + ready-to-use FAQPage JSON-LD schema
-- **Content gap analysis** — subtopics and questions the page should cover but doesn't, tailored to business type
-- **Robots.txt crawler explainer** — what each blocked crawler does, the tradeoff, and whether to allow it
-
-## What needs your approval
-
-These changes are recommended but not made until you say yes:
-
-- Heading structure fixes (H1/H2/H3 hierarchy)
-- AI-generated meta description rewrites
-- Content restructuring for better AI citability
-- Passage rewrites for weak citability scores (before/after with reasoning)
-- AI-generated alt text for images
-- FAQ sections and schema markup
-- Internal linking improvements
-- Any edits to your existing source code
-
-## Structure
-
-```
-geo-audit-skill/
-├── SKILL.md              # Skill definition and orchestration
-├── scripts/
-│   ├── fetch_page.py     # Page fetching + platform detection + robots.txt + sitemap + llms.txt + RSL
-│   ├── citability.py     # AI citation scoring, FAQ detection, entity/topic analysis, readability, multi-modal
-│   ├── schema_check.py   # JSON-LD detection, validation, and generation (incl. SpeakableSpecification, HowTo)
-│   ├── technical_seo.py  # 18 weighted technical checks
-│   ├── eeat.py           # 9 E-E-A-T trust signals
-│   ├── brand_presence.py # Social, review, and brand page detection
-│   ├── llms_txt.py       # llms.txt + RSL 1.0 quality and spec compliance
-│   ├── platform_readiness.py  # Per-AI-engine readiness scores
-│   ├── search_intent.py  # Search intent classification + page type alignment
-│   ├── content_freshness.py   # Publication/modification date detection + staleness scoring
-│   ├── internal_links.py # Link density, anchor quality, hub patterns, sitemap coverage + validation
-│   └── hreflang.py       # International SEO: hreflang tag validation
-├── templates/
-│   ├── llms.txt.j2       # llms.txt generation template
-│   └── schema/           # JSON-LD templates by business type
-└── README.md
-```
-
-## Who this is for
-
-- **Marketing managers** who want their company to show up in AI search results
-- **Small business owners** who use WordPress, Squarespace, or Wix and want to be found by ChatGPT and Perplexity
-- **SEO professionals** adding AI optimization to their toolkit
-- **Developers** who want to audit client sites from the command line
-- **Agency teams** running GEO audits for clients
-
-## Confidence labels
-
-Every finding includes a confidence label so you know what to trust:
-
-| Label | Meaning | Example |
-|-------|---------|---------|
-| **Confirmed** | Directly verified from the page | Missing HTTPS, no H1 tag, blocked crawler in robots.txt |
-| **Likely** | Based on heuristic analysis | SSR detection, E-E-A-T regex signals, composite platform scores |
-| **Hypothesis** | Suggested improvement, may not apply | "Add a data table", "Add FAQ content" |
-
-## What is GEO?
-
-GEO stands for Generative Engine Optimization. It's like SEO, but for AI search engines.
-
-Traditional SEO helps you rank on Google. GEO helps AI models (ChatGPT, Claude, Perplexity, Google AI Overviews) find, understand, and cite your content when people ask questions.
-
-The two overlap but they're not the same. A site can rank #1 on Google but be completely invisible to AI if it blocks AI crawlers, lacks structured data, or has content that's hard for AI to extract.
-
-## Keeping the crawler list up to date
-
-The AI crawler list is based on [ai-robots-txt/ai.robots.txt](https://github.com/ai-robots-txt/ai.robots.txt), the community-maintained canonical list of AI bot user-agents. Check that repo periodically for new crawlers.
+The AI crawler list is based on [ai-robots-txt/ai.robots.txt](https://github.com/ai-robots-txt/ai.robots.txt). Check that repo periodically for new crawlers.
 
 ## License
 
